@@ -14,6 +14,7 @@ Ordine:
 
 from __future__ import annotations
 
+import hashlib
 import os
 import sqlite3
 from dataclasses import dataclass
@@ -70,6 +71,7 @@ class EsitoEsecuzione:
     note: tuple[str, ...] = ()
     n_offerte: int = 0
     n_parametri: int = 0
+    sha256: str | None = None
     percorsi_sconosciuti: tuple[str, ...] = ()
     etl_run_id: int | None = None
 
@@ -93,6 +95,7 @@ def esegui(
     nuovo = percorso_db.with_name(percorso_db.name + ".new")
     snapshot = snapshot_date or oggi()
     inizio = _adesso()
+    sha256 = sha256 or _sha256_file(raw_xml)
     precedenti = _offerte_in_uso(percorso_db)
     nuovo.unlink(missing_ok=True)
 
@@ -161,6 +164,7 @@ def esegui(
         note=tuple(note),
         n_offerte=caricate.n_offerte,
         n_parametri=n_parametri,
+        sha256=sha256,
         percorsi_sconosciuti=caricate.percorsi_sconosciuti,
         etl_run_id=etl_run_id,
     )
@@ -333,6 +337,18 @@ def _swap(percorso_db: Path, nuovo: Path) -> None:
     if percorso_db.exists():
         os.replace(percorso_db, percorso_db.with_name(percorso_db.name + ".prev"))
     os.replace(nuovo, percorso_db)
+
+
+def _sha256_file(percorso: str | Path | object) -> str | None:
+    """SHA-256 del raw, se è un file; `None` per gli stream (test)."""
+    cammino = Path(percorso) if isinstance(percorso, (str, Path)) else None
+    if cammino is None or not cammino.is_file():
+        return None
+    impronta = hashlib.sha256()
+    with cammino.open("rb") as flusso:
+        while pezzo := flusso.read(1024 * 1024):
+            impronta.update(pezzo)
+    return impronta.hexdigest()
 
 
 def _adesso() -> str:

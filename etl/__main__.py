@@ -187,7 +187,7 @@ def _stampa_esecuzione(
             "db": str(esito.db),
             "snapshot_date": snapshot,
             "sorgente": sorgente,
-            "sha256": sha256,
+            "sha256": esito.sha256 or sha256,
             "n_offerte": esito.n_offerte,
             "n_parametri": esito.n_parametri,
             "percorsi_sconosciuti": list(esito.percorsi_sconosciuti),

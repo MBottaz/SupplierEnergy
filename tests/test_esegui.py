@@ -91,6 +91,18 @@ def test_primo_run_ok(tmp_path: Path) -> None:
     assert registro["percorsi_sconosciuti"] == 0
 
 
+def test_sha256_calcolato_dal_file_raw(tmp_path: Path) -> None:
+    db = tmp_path / "offerte.db"
+    esegui(FIXTURE_XML, db=db, snapshot_date=SNAPSHOT, parametri=FIXTURE_CSV)
+
+    registro = ultimo_run(db)
+    assert registro is not None
+    import hashlib
+
+    atteso = hashlib.sha256(FIXTURE_XML.read_bytes()).hexdigest()
+    assert registro["sha256"] == atteso
+
+
 def test_secondo_run_crea_prev_e_non_duplica(tmp_path: Path) -> None:
     db = tmp_path / "offerte.db"
     esegui(FIXTURE_XML, db=db, snapshot_date=SNAPSHOT, parametri=FIXTURE_CSV)
