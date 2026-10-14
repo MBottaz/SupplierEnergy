@@ -11,6 +11,10 @@ test:
 lint:
     uv run ruff check .
 
+# Formattazione del codice.
+format:
+    uv run ruff format .
+
 # Formattazione (verifica, non modifica).
 format-check:
     uv run ruff format --check .
