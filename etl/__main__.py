@@ -121,7 +121,8 @@ def _scarica(
     apri: Callable[..., AbstractContextManager[Any]] | None,
 ) -> int:
     url = opzioni.url or url_offerte(snapshot)
-    precedente = ultimo_run(opzioni.db)
+    # Per il confronto dello SHA-256 conta l'ultima esecuzione riuscita.
+    precedente = ultimo_run(opzioni.db, esito="ok")
     sha_atteso = None
     if precedente is not None and precedente.get("esito") == "ok":
         valore = precedente.get("sha256")

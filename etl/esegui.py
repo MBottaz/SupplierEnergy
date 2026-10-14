@@ -170,14 +170,19 @@ def esegui(
     )
 
 
-def ultimo_run(db: str | Path) -> dict[str, object] | None:
+def ultimo_run(db: str | Path, *, esito: str | None = None) -> dict[str, object] | None:
     """L'ultima riga di `etl_run` del DB indicato, se il DB esiste."""
     percorso = Path(db)
     if not percorso.is_file():
         return None
     with sqlite3.connect(f"file:{percorso}?mode=ro", uri=True) as conn:
         conn.row_factory = sqlite3.Row
-        riga = conn.execute("SELECT * FROM etl_run ORDER BY id DESC LIMIT 1").fetchone()
+        if esito is None:
+            riga = conn.execute("SELECT * FROM etl_run ORDER BY id DESC LIMIT 1").fetchone()
+        else:
+            riga = conn.execute(
+                "SELECT * FROM etl_run WHERE esito = ? ORDER BY id DESC LIMIT 1", (esito,)
+            ).fetchone()
     return dict(riga) if riga is not None else None
 
 

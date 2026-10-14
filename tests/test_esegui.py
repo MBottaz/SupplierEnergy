@@ -228,6 +228,23 @@ def test_esito_immutabile() -> None:
 
 def test_ultimo_run_su_db_inesistente(tmp_path: Path) -> None:
     assert ultimo_run(tmp_path / "manca.db") is None
+    assert ultimo_run(tmp_path / "manca.db", esito="ok") is None
+
+
+def test_ultimo_run_esito_ok_ignora_gli_errori(tmp_path: Path) -> None:
+    db = tmp_path / "offerte.db"
+    esegui(FIXTURE_XML, db=db, snapshot_date=SNAPSHOT, parametri=FIXTURE_CSV)
+    rotto = tmp_path / "troncato.xml"
+    rotto.write_text(FIXTURE_XML.read_text(encoding="utf-8")[:200], encoding="utf-8")
+    esegui(rotto, db=db, snapshot_date="2026-10-15", parametri=FIXTURE_CSV)
+
+    ultimo = ultimo_run(db)
+    assert ultimo is not None
+    assert ultimo["esito"] == "errore"
+    riuscito = ultimo_run(db, esito="ok")
+    assert riuscito is not None
+    assert riuscito["esito"] == "ok"
+    assert riuscito["sha256"] is not None
 
 
 @pytest.mark.parametrize("tabella", ["offerta", "componente", "condizione", "etl_run"])
