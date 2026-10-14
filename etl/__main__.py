@@ -11,14 +11,13 @@ import json
 import sqlite3
 import sys
 from collections.abc import Sequence
-from datetime import datetime
 from xml.etree.ElementTree import ParseError
 
 from defusedxml.common import DefusedXmlException
 
 from etl.caricamento import EsitoCaricamento, carica_offerte
 from etl.db import apri_db
-from etl.parser import FUSO
+from etl.tempo import oggi
 
 #: Errori strutturati: codice stabile e messaggio senza dettagli interni.
 ERRORI = {
@@ -43,7 +42,7 @@ def main(argomenti: Sequence[str] | None = None) -> int:
     )
     opzioni = parser.parse_args(argomenti)
 
-    snapshot_date = opzioni.snapshot or datetime.now(FUSO).date().isoformat()
+    snapshot_date = opzioni.snapshot or oggi()
 
     try:
         conn = apri_db(opzioni.db)

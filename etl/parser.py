@@ -24,11 +24,10 @@ from pathlib import Path
 from typing import IO, Any
 from unicodedata import category
 from xml.etree.ElementTree import Element
-from zoneinfo import ZoneInfo
 
 from defusedxml import ElementTree as DefusedET
 
-FUSO = ZoneInfo("Europe/Rome")
+from etl.tempo import FUSO
 
 #: Oltre questa lunghezza il testo libero dei venditori viene troncato.
 MAX_TESTO = 4000
