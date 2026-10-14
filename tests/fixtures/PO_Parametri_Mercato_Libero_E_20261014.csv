@@ -1,0 +1,7 @@
+nome_parametro,valore,descrizione
+pcv_a,23.04,Quota fissa non domestico
+pcv_c,23.04,Quota fissa domestico
+iva_a,22.0,IVA non domestico
+iva_c,22.0,IVA domestico
+lambda,0.1,Coefficiente di perdita di rete
+acc_a_h_h,4820.000000,Accisa non domestico
