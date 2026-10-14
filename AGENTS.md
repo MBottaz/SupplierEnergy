@@ -26,4 +26,11 @@ Pipeline che scarica le offerte luce del mercato libero (XML), i parametri regol
 
 ## Comandi
 
-Mantieni questa sezione aggiornata man mano che esistono: `just test`, `just check` (lint + tipi + test), `just etl-fixture`, `just serve-local`.
+Mantieni questa sezione aggiornata man mano che esistono:
+
+- `just test` — solo i test.
+- `just check` — lint + formattazione + tipi + test: comando unico di verifica.
+- `just format` — formatta il codice.
+- `just lint`, `just types` — lint e controllo tipi da soli.
+- `just etl-fixture` — carica la fixture in `build/offerte.db` (`python -m etl`).
+- `just serve-local` — server MCP locale: non esiste ancora (fase 5).
