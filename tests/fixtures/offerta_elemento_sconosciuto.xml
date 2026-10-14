@@ -1,0 +1,22 @@
+<ListaOfferteMercatoLibero>
+<offerta>
+<IdentificativiOfferta>
+<PIVA_UTENTE>00000000000</PIVA_UTENTE>
+<COD_OFFERTA>000000TESTSCONOSCIUTO0000000000000000</COD_OFFERTA>
+</IdentificativiOfferta>
+<DettaglioOfferta>
+<TIPO_MERCATO>01</TIPO_MERCATO>
+<NOME_OFFERTA>OFFERTA CON ELEMENTO NON PREVISTO</NOME_OFFERTA>
+<ELEMENTO_INVENTATO>valore-inventato</ELEMENTO_INVENTATO>
+</DettaglioOfferta>
+<ComponenteImpresa>
+<NOME>SPREAD</NOME>
+<ELEMENTO_COMPONENTE_INVENTATO>valore-componente</ELEMENTO_COMPONENTE_INVENTATO>
+<IntervalloPrezzi>
+<FASCIA_COMPONENTE>01</FASCIA_COMPONENTE>
+<PREZZO>0.02</PREZZO>
+<UNITA_MISURA>03</UNITA_MISURA>
+</IntervalloPrezzi>
+</ComponenteImpresa>
+</offerta>
+</ListaOfferteMercatoLibero>

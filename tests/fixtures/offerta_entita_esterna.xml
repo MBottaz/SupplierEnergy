@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE ListaOfferteMercatoLibero [
+  <!ENTITY xxe SYSTEM "file:///etc/passwd">
+]>
+<ListaOfferteMercatoLibero>
+<offerta>
+<IdentificativiOfferta>
+<PIVA_UTENTE>00000000000</PIVA_UTENTE>
+<COD_OFFERTA>000000TESTXXE0000000000000000000000</COD_OFFERTA>
+</IdentificativiOfferta>
+<DettaglioOfferta>
+<TIPO_MERCATO>01</TIPO_MERCATO>
+<NOME_OFFERTA>&xxe;</NOME_OFFERTA>
+</DettaglioOfferta>
+</offerta>
+</ListaOfferteMercatoLibero>
