@@ -1,0 +1,45 @@
+[project]
+name = "offerte"
+version = "0.1.0"
+description = "Database delle offerte luce del mercato libero, esposto in sola lettura ad agenti AI"
+requires-python = ">=3.11"
+dependencies = [
+    # La stdlib `xml.etree` non espone un interruttore per vietare DTD ed
+    # entità: `defusedxml` è un wrapper puro Python sopra expat che rifiuta
+    # DTD, entità e documenti gonfiati (XXE / billion laughs). `lxml`
+    # risolverebbe lo stesso problema ma aggiunge una dipendenza C compilata.
+    "defusedxml==0.7.1",
+]
+
+[dependency-groups]
+dev = [
+    "pytest==9.1.1",
+    "ruff==0.17.0",
+    "mypy==2.4.0",
+]
+
+# Progetto non destinato alla pubblicazione: nessun build backend, l'ambiente
+# virtuale contiene solo le dipendenze.
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-q"
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["B", "E", "F", "I", "RUF", "SIM", "UP"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+files = ["etl", "offerte", "cli", "mcp_server", "authctl", "tests"]
+
+[[tool.mypy.overrides]]
+module = ["defusedxml.*"]
+ignore_missing_imports = true

@@ -1,0 +1,15 @@
+# Ambiente / cache
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Artefatti locali
+build/
+raw/
+*.db
+*.db.new
+*.db.prev
+*.sqlite
