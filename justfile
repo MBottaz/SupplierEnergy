@@ -25,7 +25,23 @@ types:
 
 # Carica la fixture nella directory di build (verifica end-to-end dell'ETL).
 etl-fixture:
-    uv run python -m etl --db build/offerte.db tests/fixtures/offerta_estratto.xml
+    uv run python -m etl locale --db build/offerte.db \
+        --raw tests/fixtures/offerta_estratto.xml \
+        --parametri tests/fixtures/PO_Parametri_Mercato_Libero_E_20261014.csv \
+        --snapshot 2026-10-14
+
+# Carica i dati reali dal raw locale (XML completo + CSV dei parametri).
+etl-reale:
+    uv run python -m etl locale --db build/offerte.db \
+        --raw raw/2026-10-14/PO_Offerte_E_MLIBERO_20261014.xml \
+        --parametri docs/PO_Parametri_Mercato_Libero_E_20261014.csv \
+        --snapshot 2026-10-14
+
+# Scarica l'XML open data del giorno e carica il DB (usa la rete).
+etl-scarica:
+    uv run python -m etl scarica --db build/offerte.db \
+        --raw-dir raw \
+        --parametri docs/PO_Parametri_Mercato_Libero_E_20261014.csv
 
 # Lint + tipi + test.
 check: lint format-check types test

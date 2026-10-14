@@ -32,5 +32,7 @@ Mantieni questa sezione aggiornata man mano che esistono:
 - `just check` — lint + formattazione + tipi + test: comando unico di verifica.
 - `just format` — formatta il codice.
 - `just lint`, `just types` — lint e controllo tipi da soli.
-- `just etl-fixture` — carica la fixture in `build/offerte.db` (`python -m etl`).
+- `just etl-fixture` — carica la fixture in `build/offerte.db` (ETL completo).
+- `just etl-reale` — carica l'XML completo da `raw/2026-10-14/` + il CSV parametri.
+- `just etl-scarica` — scarica l'XML open data del giorno e carica il DB (rete).
 - `just serve-local` — server MCP locale: non esiste ancora (fase 5).
