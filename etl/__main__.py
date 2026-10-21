@@ -5,6 +5,10 @@
 - `python -m etl scarica --db DB [--url URL] [--raw-dir raw] [--parametri CSV]`
   scarica l'XML open data (condizionale: 304 o SHA-256 invariato = niente da
   fare) e poi esegue l'ETL.
+- `python -m etl pun --db DB [--file CSV | --url URL] [--raw-dir raw]`
+  aggiorna il PUN mensile (serie `PUN_MENSILE`) dal CSV "Prezzi storici" del
+  Portale Offerte, senza ricostruire il resto del DB: è uno storico che si
+  accumula tra le ricostruzioni.
 
 L'output è JSON; gli errori hanno `codice` e `messaggio`, senza dettagli interni.
 """
@@ -19,6 +23,7 @@ from collections.abc import Callable, Sequence
 from contextlib import AbstractContextManager
 from typing import Any
 
+from etl.db import apri_db
 from etl.download import (
     HOST_AMMESSI,
     DownloadFallito,
@@ -28,6 +33,7 @@ from etl.download import (
     scarica,
 )
 from etl.esegui import EsitoEsecuzione, esegui, ultimo_run
+from etl.pun import URL_PUN, carica_pun, nome_file_raw
 from etl.tempo import oggi
 
 #: URL open data indicato dall'utente (Portale Offerte, mercato libero elettrico).
@@ -51,6 +57,7 @@ ERRORI = {
     "url_non_ammesso": "URL non ammesso: servono HTTPS e un host in allowlist.",
     "download_fallito": "Download non riuscito.",
     "download_troppo_grande": "Il file scaricato supera il limite di dimensione.",
+    "pun_non_valido": "Il file dei prezzi storici non è nel formato atteso.",
 }
 
 
@@ -83,7 +90,16 @@ def main(
     )
     rete.add_argument("--raw-dir", default="raw", help="cartella dei raw datati (default: raw)")
 
+    pun = comandi.add_parser("pun", help="aggiorna il PUN mensile nel DB (storico)")
+    pun.add_argument("--db", required=True, help="percorso del database SQLite")
+    pun.add_argument("--raw-dir", default="raw", help="cartella dei raw datati (default: raw)")
+    sorgente = pun.add_mutually_exclusive_group()
+    sorgente.add_argument("--file", default=None, help="CSV dei prezzi storici già scaricato")
+    sorgente.add_argument("--url", default=None, help=f"default: {URL_PUN}")
+
     opzioni = parser.parse_args(argomenti)
+    if opzioni.comando == "pun":
+        return _pun(opzioni, apri=apri)
     snapshot = opzioni.snapshot or oggi()
     if opzioni.comando == "locale":
         return _locale(opzioni, snapshot)
@@ -171,6 +187,69 @@ def _scarica(
     if esito.esito == "ok":
         pulisci_vecchi(opzioni.raw_dir, oggi=snapshot)
     return _stampa_esecuzione(esito, snapshot, sorgente=url, sha256=scaricato.sha256)
+
+
+def _pun(
+    opzioni: argparse.Namespace,
+    *,
+    apri: Callable[..., AbstractContextManager[Any]] | None,
+) -> int:
+    """Aggiorna il PUN mensile: da un file locale o scaricando il CSV del Portale.
+
+    Non ricostruisce il DB: scrive solo `pun`, con upsert sulla chiave
+    `(data, serie)`, così lo storico si accumula e un secondo caricamento non
+    duplica righe.
+    """
+    percorso = opzioni.file
+    sha256 = None
+    if percorso is None:
+        url = opzioni.url or URL_PUN
+        try:
+            scaricato = scarica(
+                url,
+                cartella_raw=opzioni.raw_dir,
+                giorno=oggi(),
+                nome_file=nome_file_raw(oggi()),
+                apri=apri,
+            )
+        except UrlNonAmmesso:
+            return _errore("url_non_ammesso")
+        except DownloadTroppoGrande:
+            return _errore("download_troppo_grande")
+        except DownloadFallito:
+            return _errore("download_fallito")
+        assert scaricato.percorso is not None
+        percorso, sha256 = scaricato.percorso, scaricato.sha256
+
+    try:
+        conn = apri_db(opzioni.db)
+    except sqlite3.Error:
+        return _errore("db_non_apribile")
+    try:
+        esito = carica_pun(conn, percorso)
+    except ValueError:
+        return _errore("pun_non_valido")
+    except OSError:
+        return _errore("file_non_leggibile")
+    except sqlite3.Error:
+        return _errore("errore_interno")
+    finally:
+        conn.close()
+
+    _stampa(
+        {
+            "esito": "ok",
+            "db": str(opzioni.db),
+            "serie": esito.serie,
+            "n_righe": esito.n_righe,
+            "n_scartate": esito.n_scartate,
+            "prima": esito.prima,
+            "ultima": esito.ultima,
+            "sorgente": str(percorso),
+            "sha256": sha256,
+        }
+    )
+    return 0
 
 
 def _stampa_esecuzione(

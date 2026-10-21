@@ -99,6 +99,25 @@ def test_download_salva_il_raw_datato(tmp_path: Path) -> None:
     assert list(atteso.parent.glob("*.tmp")) == []
 
 
+def test_download_usa_il_nome_file_indicato(tmp_path: Path) -> None:
+    """Un nome opaco nell'URL può essere sostituito da uno descrittivo."""
+    apri, _ = _apri_con(RispostaFinta(CONTENUTO))
+    esito = scarica(
+        URL,
+        cartella_raw=tmp_path,
+        giorno=GIORNO,
+        nome_file="PO_Prezzi_Storici_20261014.csv",
+        apri=apri,
+    )
+    assert esito.percorso == tmp_path / GIORNO / "PO_Prezzi_Storici_20261014.csv"
+
+    apri, _ = _apri_con(RispostaFinta(CONTENUTO))
+    esito = scarica(
+        URL, cartella_raw=tmp_path, giorno=GIORNO, nome_file="../../etc/passwd", apri=apri
+    )
+    assert esito.percorso == tmp_path / GIORNO / "passwd"
+
+
 def test_download_invia_le_intestazioni_condizionali(tmp_path: Path) -> None:
     apri, richieste = _apri_con(RispostaFinta(CONTENUTO))
     scarica(URL, cartella_raw=tmp_path, giorno=GIORNO, apri=apri)

@@ -83,12 +83,17 @@ def scarica(
     etag: str | None = None,
     ultima_modifica: str | None = None,
     sha256_atteso: str | None = None,
+    nome_file: str | None = None,
     apri: Callable[..., AbstractContextManager[Any]] | None = None,
     max_byte: int = MAX_BYTE,
     timeout: float = TIMEOUT_SECONDI,
     dimensione_pezzo: int = DIMENSIONE_PEZZO,
 ) -> EsitoDownload:
-    """Scarica `url` in `cartella_raw/AAAA-MM-GG/`, se serve."""
+    """Scarica `url` in `cartella_raw/AAAA-MM-GG/`, se serve.
+
+    `nome_file` sostituisce il nome ricavato dall'URL (comunque ripulito):
+    serve ai documenti con nome opaco, come i CSV della sezione CMS.
+    """
     controllo_url(url)
     giorno = giorno or oggi()
     apri_rete = apri or _apri_predefinito
@@ -118,7 +123,7 @@ def scarica(
 
         cartella = Path(cartella_raw) / giorno
         cartella.mkdir(parents=True, exist_ok=True)
-        nome = _nome_file(url)
+        nome = _nome_file(nome_file or url)
         temporaneo = cartella / f"{nome}.tmp"
         sha, byte = _copia(risposta, temporaneo, max_byte, dimensione_pezzo)
 

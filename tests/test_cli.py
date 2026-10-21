@@ -14,9 +14,12 @@ from urllib.request import Request
 import pytest
 
 from etl.__main__ import main
+from etl.pun import nome_file_raw
+from etl.tempo import oggi
 
 FIXTURE = Path(__file__).parent / "fixtures" / "offerta_estratto.xml"
 CSV = Path(__file__).parent / "fixtures" / "PO_Parametri_Mercato_Libero_E_20261014.csv"
+PUN = Path(__file__).parent / "fixtures" / "pun_storico_estratto.csv"
 URL = (
     "https://www.ilportaleofferte.it/portaleOfferte/resources/opendata/csv/offerteML/"
     "2026_10/PO_Offerte_E_MLIBERO_20261014.xml"
@@ -219,6 +222,70 @@ def test_scarica_url_non_ammesso(tmp_path: Path, capsys: pytest.CaptureFixture[s
                 "--url",
                 "https://example.com/opendata.xml",
             ],
+            apri=rete_finta(b"x"),
+        )
+        == 1
+    )
+    errore = json.loads(capsys.readouterr().err)
+    assert errore["codice"] == "url_non_ammesso"
+
+
+def test_pun_carica_da_file_locale_e_non_duplica(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    db = tmp_path / "offerte.db"
+    argomenti = ["pun", "--db", str(db), "--file", str(PUN)]
+
+    assert main(argomenti) == 0
+    esito = _output(capsys)
+    assert esito["esito"] == "ok"
+    assert esito["serie"] == "PUN_MENSILE"
+    assert esito["n_righe"] == 4
+    assert esito["n_scartate"] == 1
+    assert esito["prima"] == "2020-01-01"
+    assert esito["ultima"] == "2022-10-01"
+    assert esito["sorgente"] == str(PUN)
+    assert esito["sha256"] is None
+
+    assert main(argomenti) == 0
+    capsys.readouterr()
+    with sqlite3.connect(db) as conn:
+        assert conn.execute("SELECT count(*) FROM pun").fetchone() == (4,)
+
+
+def test_pun_scarica_e_salva_il_raw(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    db = tmp_path / "offerte.db"
+    raw = tmp_path / "raw"
+    contenuto = PUN.read_bytes()
+
+    assert main(["pun", "--db", str(db), "--raw-dir", str(raw)], apri=rete_finta(contenuto)) == 0
+
+    esito = _output(capsys)
+    assert esito["esito"] == "ok"
+    assert esito["n_righe"] == 4
+    assert esito["sha256"] == hashlib.sha256(contenuto).hexdigest()
+    assert (raw / oggi() / nome_file_raw(oggi())).read_bytes() == contenuto
+    assert esito["sorgente"] == str(raw / oggi() / nome_file_raw(oggi()))
+
+
+def test_pun_file_non_valido(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    percorso = tmp_path / "pun.csv"
+    percorso.write_text("nome_parametro;valore;descrizione\r\npcv_a;1;x\r\n", encoding="utf-8")
+    assert main(["pun", "--db", str(tmp_path / "offerte.db"), "--file", str(percorso)]) == 1
+    errore = json.loads(capsys.readouterr().err)
+    assert errore["codice"] == "pun_non_valido"
+
+
+def test_pun_file_inesistente(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    assert main(["pun", "--db", str(tmp_path / "offerte.db"), "--file", "/nope/pun.csv"]) == 1
+    errore = json.loads(capsys.readouterr().err)
+    assert errore["codice"] == "file_non_leggibile"
+
+
+def test_pun_url_non_ammesso(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    assert (
+        main(
+            ["pun", "--db", str(tmp_path / "offerte.db"), "--url", "https://example.com/pun.csv"],
             apri=rete_finta(b"x"),
         )
         == 1

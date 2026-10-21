@@ -43,5 +43,13 @@ etl-scarica:
         --raw-dir raw \
         --parametri docs/PO_Parametri_Mercato_Libero_E_20261014.csv
 
+# Scarica il file "Prezzi storici" e aggiorna il PUN mensile nel DB (usa la rete).
+etl-pun:
+    uv run python -m etl pun --db build/offerte.db --raw-dir raw
+
+# Carica il PUN mensile da un CSV locale: just etl-pun-file PERCORSO.
+etl-pun-file FILE:
+    uv run python -m etl pun --db build/offerte.db --file "{{FILE}}"
+
 # Lint + tipi + test.
 check: lint format-check types test
