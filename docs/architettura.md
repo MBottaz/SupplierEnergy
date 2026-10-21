@@ -48,7 +48,7 @@ Gli utilizzatori sono agenti, non persone: nomi, descrizioni e formati di output
 
 1. **Offerte XML**: Portale Offerte di ARERA (open data), elettricità, mercato libero. Trova l'URL ufficiale e il **tracciato ufficiale** con le tabelle di decodifica. Download condizionale (ETag / If-Modified-Since); se lo SHA-256 coincide con quello dell'ultima esecuzione, non fare nulla. Verifica la licenza d'uso.
 2. **Parametri CSV**: `PO_Parametri_Mercato_Libero_E_AAAAMMGG.csv`, colonne `nome_parametro,valore,descrizione`, ~100 righe. La data nel nome è la data di riferimento: salvala con i valori.
-3. **PUN giornaliero**: fonte primaria il servizio API del GME (guida tecnica ufficiale di ottobre 2025, con autenticazione: serve una registrazione dell'utente). Alternativa: file della sezione "MGP – Download". Dal 2025 l'indice è il PUN Index GME: verifica la definizione e salva nel DB quale serie usi. **Verifica i termini d'uso del GME** (uso commerciale, ridistribuzione) e annotali in `docs/questioni_aperte.md`: vincolano il modo in cui il servizio può essere offerto a terzi.
+3. **PUN**: due fonti, entrambe da verificare nei termini d'uso. *Serie mensile* (serve alla maggior parte delle offerte indicizzate): CSV "Prezzi storici - indici a pubblica diffusione" della pagina Open Data del Portale Offerte, colonna `PUN (€/kWh)`, un valore per mese; `python -m etl pun` lo scarica e aggiorna `pun` (serie `PUN_MENSILE`), l'URL non è datato e sta in `etl/pun.py`. *Serie giornaliera*: servizio API del GME (guida tecnica ufficiale di ottobre 2025, con autenticazione: serve una registrazione dell'utente). Alternativa: file della sezione "MGP – Download". Dal 2025 l'indice è il PUN Index GME: verifica la definizione e salva in `pun` quale serie usi. **Verifica i termini d'uso di entrambe le fonti** (uso commerciale, ridistribuzione) e annotali in `docs/questioni_aperte.md`: vincolano il modo in cui il servizio può essere offerto a terzi.
 
 Molte offerte indicizzate usano la media mensile del PUN, non il giornaliero: leggi la definizione dell'indice (`IDX_PREZZO_ENERGIA`) dal tracciato.
 
@@ -71,7 +71,7 @@ Formato "long": fasce F1/F2/F3 e quote fisse sono semplici righe di `componente`
 - `codifica(dominio, codice, descrizione)`
 - `parametro(nome, valore, descrizione, riferimento)`, chiave `(nome, riferimento)`
 - `parametro_meta(nome, unita, categoria_cliente, tipologia_bta, tipo)`, compilata dalla documentazione ufficiale
-- `pun(data, valore_eur_mwh, serie)`, chiave `(data, serie)`
+- `pun(data, valore_eur_mwh, serie)`, chiave `(data, serie)`. Due serie previste: `PUN_MENSILE` (media mensile, dal file Prezzi storici del Portale Offerte, caricata da `python -m etl pun`) e, se servirà, `PUN_GIORNALIERO` (dal GME).
 - `etl_run(id, inizio, fine, esito, sorgente, sha256, n_offerte, percorsi_sconosciuti, note)`
 
 Normalizzazione:

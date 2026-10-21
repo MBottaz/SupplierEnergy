@@ -18,8 +18,9 @@ The XML parser is streaming and hardened against DTD/external entities. Unknown 
 
 | Path | Purpose |
 | --- | --- |
-| `etl/` | Download, XML parsing, CSV parameter loading, schema, validation, and atomic swap. Entry point: `python -m etl`. |
+| `etl/` | Download, XML parsing, CSV parameter loading, PUN loading, schema, validation, and atomic swap. Entry point: `python -m etl`. |
 | `etl/schema.sql` | SQLite schema for offers, components, conditions, parameters, decodings, PUN, and ETL runs. |
+| `etl/pun.py` | Monthly PUN from the Portale Offerte "Prezzi storici" CSV (`PUN_MENSILE` series); it accumulates across database rebuilds. |
 | `offerte/` | Planned read-only query and calculation library; currently only the package skeleton. |
 | `cli/` | Planned CLI frontend for the library; currently only the package skeleton. |
 | `mcp_server/` | Planned MCP frontend; currently only the package skeleton. |
@@ -72,6 +73,13 @@ Download the current XML from the allowlisted Portale Offerte host and load it:
 just etl-scarica
 ```
 
+Update the PUN series without rebuilding the offers database:
+
+```bash
+just etl-pun                        # downloads the Portale Offerte CSV
+just etl-pun-file path/to/prezzi.csv  # loads a file already downloaded
+```
+
 The network command still takes the parameter CSV from `docs/`; check `justfile` before using it with a different snapshot.
 
 The ETL can also be run directly:
@@ -87,12 +95,16 @@ uv run python -m etl scarica \
   --db build/offerte.db \
   --raw-dir raw \
   --parametri path/to/PO_Parametri_Mercato_Libero_E_AAAAMMGG.csv
+
+uv run python -m etl pun \
+  --db build/offerte.db \
+  --raw-dir raw
 ```
 
 Commands print structured JSON. A failed validation leaves the active database unchanged and returns a non-zero exit code.
 
 ## Current scope
 
-The implemented scope is the ETL and its validation on the fixture and real XML summary. The query library, user CLI, MCP server, authentication, PUN ingestion, and deployment units are planned work, not runnable features yet.
+The implemented scope is the ETL (offers, parameters, and the monthly PUN series) and its validation on the fixture and real XML summary. The query library, user CLI, MCP server, authentication, daily PUN ingestion, and deployment units are planned work, not runnable features yet.
 
 Read `docs/architettura.md` for the design and data model, `PROMPT.md` for the planned phases, `docs/validazione_xml.md` for the aggregate validation of the real XML, and `docs/questioni_aperte.md` for unresolved source and calculation questions.
