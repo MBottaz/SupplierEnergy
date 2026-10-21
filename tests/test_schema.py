@@ -47,7 +47,6 @@ COLONNE_ATTESE: dict[str, tuple[str, ...]] = {
     "condizione": ("piva", "cod_offerta", "tipologia", "descrizione", "limitante"),
     "codifica": ("dominio", "codice", "descrizione"),
     "parametro": ("nome", "valore", "descrizione", "riferimento"),
-    "parametro_meta": ("nome", "unita", "categoria_cliente", "tipologia_bta", "tipo"),
     "pun": ("data", "valore_eur_mwh", "serie"),
     "etl_run": (
         "id",
@@ -97,7 +96,6 @@ def test_chiavi_primarie(conn: sqlite3.Connection) -> None:
     assert chiavi["parametro"] == ("nome", "riferimento")
     assert chiavi["pun"] == ("data", "serie")
     assert chiavi["etl_run"] == ("id",)
-    assert chiavi["parametro_meta"] == ("nome",)
     assert chiavi["componente"] == ()
     assert chiavi["condizione"] == ()
 

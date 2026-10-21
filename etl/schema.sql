@@ -87,16 +87,6 @@ CREATE TABLE IF NOT EXISTS parametro (
     PRIMARY KEY (nome, riferimento)
 );
 
--- Metadati dei parametri (unità, categoria cliente, BTA), dalla documentazione
--- ufficiale: non si derivano dai nomi.
-CREATE TABLE IF NOT EXISTS parametro_meta (
-    nome             TEXT NOT NULL PRIMARY KEY,
-    unita            TEXT,
-    categoria_cliente TEXT,
-    tipologia_bta    TEXT,
-    tipo             TEXT
-);
-
 -- PUN giornaliero. `serie` dice quale serie è stata salvata.
 CREATE TABLE IF NOT EXISTS pun (
     data            TEXT NOT NULL,   -- ISO 8601, giorno

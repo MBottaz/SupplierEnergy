@@ -4,8 +4,9 @@ Regole (docs/architettura.md §4 e §7):
 
 - la data nel nome del file è la data di riferimento: si salva con i valori;
 - le righe si caricano così come sono, senza interpretare i nomi;
-- le unità di misura non sono nel file: `parametro_meta` si compila dalla
-  documentazione ufficiale, non per induzione (questione aperta);
+- le unità di misura non sono nel file: i metadati (`unita`, `categoria_cliente`,
+  BTA) si ricaveranno dalla documentazione ufficiale in fase B, con una tabella
+  dedicata: non si derivano dai nomi (questione aperta);
 - alcuni parametri sono obbligatori: se mancano, l'ETL blocca lo swap.
 """
 

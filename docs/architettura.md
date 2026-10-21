@@ -75,8 +75,7 @@ Formato "long": fasce F1/F2/F3 e quote fisse sono semplici righe di `componente`
 - `componente(piva, cod_offerta, nome, descrizione, tipologia, macroarea, fascia, prezzo, unita_misura, extra_json)`
 - `condizione(piva, cod_offerta, tipologia, descrizione, limitante)`
 - `codifica(dominio, codice, descrizione)`
-- `parametro(nome, valore, descrizione, riferimento)`, chiave `(nome, riferimento)`
-- `parametro_meta(nome, unita, categoria_cliente, tipologia_bta, tipo)`, compilata dalla documentazione ufficiale
+- `parametro(nome, valore, descrizione, riferimento)`, chiave `(nome, riferimento)`. I metadati dei parametri (`unita`, `categoria_cliente`, BTA) arrivano in fase B, con una tabella dedicata compilata dalla documentazione ufficiale: non si aggiunge una tabella vuota adesso.
 - `pun(data, valore_eur_mwh, serie)`, chiave `(data, serie)`. Due serie previste: `PUN_MENSILE` (media mensile, dal file Prezzi storici del Portale Offerte, caricata da `python -m etl pun`) e, se servirà, `PUN_GIORNALIERO` (dal GME).
 - `etl_run(id, inizio, fine, esito, sorgente, sha256, n_offerte, percorsi_sconosciuti, note)`
 
@@ -92,9 +91,9 @@ Il DB si ricostruisce da zero a ogni esecuzione dall'ultimo raw, copiando dal pr
 Dal file `PO_Parametri_Mercato_Libero_E_20260928.csv` (100 righe):
 
 - I nomi seguono uno schema: prefisso della componente (`acc`, `arim`, `asos`, `dis`, `iva`, `pcv`…), categoria cliente (`_d`/`_nd`/`_a`, `_dr`/`_dnr`, `_b1`…`_b6`) e tipo (`_c` energia, `_f` quota fissa, `_p` potenza).
-- **Le unità non sono nel file**: convivono €/kWh, €/anno o €/POD/anno, €/kW/anno, importi anomali (`acc_a_h_h` = 4820.0, `gamma` = -73.5737) e adimensionali (`lambda` = 0.1). `parametro_meta` si compila dalla documentazione ufficiale, non per induzione dai nomi.
-- Si caricano sempre tutte le righe così come sono; i metadati si derivano in un secondo passaggio, così un cambio di schema dei nomi non rompe il caricamento.
-- La classificazione BTA (`_b1`…`_b6`) va mappata a potenza/uso del cliente dal documento ufficiale; se non è reperibile, chiedi all'utente.
+- **Le unità non sono nel file**: convivono €/kWh, €/anno o €/POD/anno, €/kW/anno, importi anomali (`acc_a_h_h` = 4820.0, `gamma` = -73.5737) e adimensionali (`lambda` = 0.1). I metadati (unità, categoria cliente, BTA) si ricaveranno dalla documentazione ufficiale in fase B, non per induzione dai nomi.
+- Si caricano sempre tutte le righe così come sono; i metadati arrivano in un secondo passaggio (fase B), così un cambio di schema dei nomi non rompe il caricamento.
+- La classificazione BTA (`_b1`…`_b6`) va mappata a potenza/uso del cliente dal documento ufficiale; se non è reperibile, chiedi all'utente. Questa mappatura serve alla fase B, non al caricamento dei parametri.
 - Parametri obbligatori controllati dall'ETL (almeno `pcv_a`, `pcv_c`, `iva_a`, `iva_c`, `lambda`): se mancano, lo swap è bloccato.
 
 ## 8. ETL

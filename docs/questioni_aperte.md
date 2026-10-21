@@ -24,7 +24,8 @@ indovina: qui sta cosa manca, cosa blocca e in quale fase si risolve.
 4. **Mappatura BTA** `_b1`…`_b6` → potenza/uso del cliente e **unità di misura
    dei parametri** del CSV (assenti dal file): servono i documenti ufficiali
    della raccolta parametri. Se non reperibili, chiedere all'utente prima di
-   compilare `parametro_meta`.
+   aggiungere la tabella dei metadati (fase B: la tabella non esiste ancora,
+   così non resta vuota e inutilizzata).
 5. **Codici "Altro"** (`IDX_PREZZO_ENERGIA=99`, `TIPO_DISPACCIAMENTO=99`,
    `MODALITA_PAGAMENTO=99`…): il tracciato li ammette ma il valore vero sta in
    un campo di testo libero. Come trattarli nel calcolo (fase 4) va deciso:

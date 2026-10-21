@@ -100,5 +100,3 @@ def test_file_reale_dei_parametri(conn: sqlite3.Connection) -> None:
         "SELECT count(*) AS n FROM parametro WHERE valore IS NULL OR valore = ''"
     ).fetchone()["n"]
     assert vuoti == 0
-    n_meta = conn.execute("SELECT count(*) AS n FROM parametro_meta").fetchone()["n"]
-    assert n_meta == 0
