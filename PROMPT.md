@@ -12,7 +12,7 @@ Sei un agente di sviluppo. Contesto stabile: `AGENTS.md` (regole) e `docs/archit
 
 ## Fase 1: scheletro e parser sulla fixture
 
-Fai: struttura del repo (`etl/`, `offerte/` libreria, `cli/`, `mcp_server/`, `authctl/`, `deploy/`, `tests/`, `docs/`), `justfile` con `test` e `check`, schema SQLite come in `docs/architettura.md` §6, parser tollerante (§5) per l'XML, caricamento in SQLite.
+Fai: struttura del repo (`etl/` scrittore, `offerte/` unico pacchetto non-ETL con libreria, CLI, server MCP e auth come sottomoduli, `deploy/`, `tests/`, `docs/`), `justfile` con `test` e `check`, schema SQLite come in `docs/architettura.md` §6, parser tollerante (§5) per l'XML, caricamento in SQLite.
 
 Parti da: `tests/fixtures/offerta_estratto.xml` (una offerta). Cerca il tracciato ufficiale con le decodifiche e caricalo in `codifica`; se non lo trovi, questione aperta.
 

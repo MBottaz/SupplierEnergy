@@ -28,9 +28,10 @@ Gli utilizzatori sono agenti, non persone: nomi, descrizioni e formati di output
                                                               │
                                                     offerte.db (aperto in sola lettura)
                                                               │
-                              libreria `offerte` (query + calcolo, nessun I/O di rete)
+                              pacchetto `offerte` (nessun I/O di rete nella libreria)
                                ├── CLI `offerte ... --json`      → agenti locali (via shell)
-                               └── server MCP su 127.0.0.1       → agenti remoti
+                               ├── server MCP su 127.0.0.1       → agenti remoti
+                               └── `authctl` (gestione chiavi)   → non gira come servizio
                                                               │
         cloudflared (Tunnel: solo connessione in uscita) ←→ Cloudflare (proxy: DDoS, WAF, rate limit) ←→ agenti
 ```
@@ -43,6 +44,11 @@ Gli utilizzatori sono agenti, non persone: nomi, descrizioni e formati di output
 | server MCP | espone le stesse funzioni come tool, verifica token, rate limit | non scrive il DB, non emette token |
 | `authctl` | crea, elenca, revoca API key | non gira come servizio |
 | Cloudflare + Tunnel | DDoS, WAF, rate limit grossolano, TLS pubblico | non sostituisce l'autenticazione applicativa |
+
+Un solo pacchetto Python non-ETL, `offerte`: la libreria (query e calcolo) più
+i frontend `offerte.cli`, `offerte.mcp` e `offerte.auth`. Sono processi
+separati (e utenti di sistema separati, §12), ma un unico package: la
+separazione dei privilegi è a livello di processo, non di namespace.
 
 ## 4. Fonti dati (gli URL vanno verificati, non inventati)
 

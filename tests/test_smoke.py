@@ -9,6 +9,6 @@ import importlib
 import pytest
 
 
-@pytest.mark.parametrize("pacchetto", ["etl", "offerte", "cli", "mcp_server", "authctl"])
+@pytest.mark.parametrize("pacchetto", ["etl", "offerte"])
 def test_pacchetti_importabili(pacchetto: str) -> None:
     assert importlib.import_module(pacchetto) is not None

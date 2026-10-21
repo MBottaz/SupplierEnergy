@@ -21,10 +21,7 @@ The XML parser is streaming and hardened against DTD/external entities. Unknown 
 | `etl/` | Download, XML parsing, CSV parameter loading, PUN loading, schema, validation, and atomic swap. Entry point: `python -m etl`. |
 | `etl/schema.sql` | SQLite schema for offers, components, conditions, parameters, decodings, PUN, and ETL runs. |
 | `etl/pun.py` | Monthly PUN from the Portale Offerte "Prezzi storici" CSV (`PUN_MENSILE` series); it accumulates across database rebuilds. |
-| `offerte/` | Planned read-only query and calculation library; currently only the package skeleton. |
-| `cli/` | Planned CLI frontend for the library; currently only the package skeleton. |
-| `mcp_server/` | Planned MCP frontend; currently only the package skeleton. |
-| `authctl/` | Planned API-key management; currently only the package skeleton. |
+| `offerte/` | Single non-ETL package: read-only query and calculation library, with the CLI, MCP server, and API-key management as submodules (`offerte.cli`, `offerte.mcp`, `offerte.auth`). Currently only the package skeleton. |
 | `tests/` | Unit and integration tests, including XML security and ETL swap cases. |
 | `docs/` | Architecture, XML validation, open questions, and the tracked parameter fixture. |
 | `build/` | Local generated database files; ignored by Git. |

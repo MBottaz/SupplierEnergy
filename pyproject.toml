@@ -38,7 +38,7 @@ select = ["B", "E", "F", "I", "RUF", "SIM", "UP"]
 [tool.mypy]
 python_version = "3.11"
 strict = true
-files = ["etl", "offerte", "cli", "mcp_server", "authctl", "tests"]
+files = ["etl", "offerte", "tests"]
 
 [[tool.mypy.overrides]]
 module = ["defusedxml.*"]
