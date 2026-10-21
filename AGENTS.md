@@ -22,6 +22,7 @@ Pipeline che scarica le offerte luce del mercato libero (XML), i parametri regol
 - Un task alla volta, piccolo e verificabile. Prima il test (o il comando di verifica), poi l'implementazione.
 - Hai finito solo quando `just check` passa. Mostra l'esito, non dichiararlo.
 - Commit piccoli e descrittivi, uno per task.
+- Prima di ogni commit, aggiorna `README.md` se sono cambiati organizzazione, comportamento, comandi o stato del progetto; il README deve descrivere sempre il repository attuale.
 - A fine fase: riepilogo di 5-10 righe (cosa fatto, cosa verificato, questioni aperte) e fermati.
 
 ## Comandi
