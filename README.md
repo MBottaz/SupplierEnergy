@@ -103,6 +103,6 @@ Commands print structured JSON. A failed validation leaves the active database u
 
 ## Current scope
 
-The implemented scope is the ETL (offers, parameters, and the monthly PUN series) and its validation on the fixture and real XML summary. The query library, user CLI, MCP server, authentication, daily PUN ingestion, and deployment units are planned work, not runnable features yet.
+The implemented scope is the ETL (offers, parameters, and the monthly PUN series) and its validation on the fixture and real XML summary. The query library, CLI, MCP server, authentication, and deployment units are planned work, not runnable features yet; the daily PUN series (GME) is out of scope for now.
 
 Read `docs/architettura.md` for the design and data model, `PROMPT.md` for the planned phases, `docs/validazione_xml.md` for the aggregate validation of the real XML, and `docs/questioni_aperte.md` for unresolved source and calculation questions.

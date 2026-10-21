@@ -87,7 +87,7 @@ CREATE TABLE IF NOT EXISTS parametro (
     PRIMARY KEY (nome, riferimento)
 );
 
--- PUN giornaliero. `serie` dice quale serie è stata salvata.
+-- PUN: una serie alla volta, mensile o giornaliera. `serie` dice quale è stata salvata.
 CREATE TABLE IF NOT EXISTS pun (
     data            TEXT NOT NULL,   -- ISO 8601, giorno
     valore_eur_mwh  REAL,

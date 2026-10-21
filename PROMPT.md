@@ -28,9 +28,14 @@ Accettazione: ETL idempotente; un XML troncato non sostituisce il DB in uso; `do
 
 ## Fase 3: PUN
 
-Fai: ingestione del PUN giornaliero dalla fonte indicata in §4 (servizio API del GME; l'utente fornirà le credenziali, non inventarle), tabella `pun` con la serie usata, storico che si accumula tra le ricostruzioni.
+Fai: ingestione del **PUN mensile** dal file "Prezzi storici" del Portale Offerte
+(§4), tabella `pun` con la serie usata (`PUN_MENSILE`), storico che si accumula
+tra le ricostruzioni, aggiornamento con lo stesso swap atomico dell'ETL. Il PUN
+giornaliero (servizio API del GME) è **fuori scope per ora**.
 
-Accettazione: un range di date reale viene caricato e rileggibile; un secondo caricamento non duplica le righe; i termini d'uso del GME sono annotati in `docs/questioni_aperte.md`.
+Accettazione: un range di date reale viene caricato e rileggibile; un secondo
+caricamento non duplica le righe; i termini d'uso delle fonti sono annotati in
+`docs/questioni_aperte.md`.
 
 ## Fase 4: libreria, calcolo (fase A) e CLI
 
@@ -42,16 +47,16 @@ Accettazione: `just check` verde; `offerte confronta --json ...` restituisce una
 
 ## Fase 5: server MCP e autenticazione
 
-Fai: server MCP come strato sottile sulla libreria (stesse funzioni e nomi della CLI), prima in stdio per i test locali, poi streamable HTTP su `127.0.0.1`; `TokenVerifier` con API key (hash, rate limit per chiave); `authctl`.
+Fai: server MCP come strato sottile sulla libreria (stesse funzioni e nomi della CLI, una sola implementazione per operazione), prima in stdio per i test locali, poi streamable HTTP su `127.0.0.1`; API key dirette nel server (hash SHA-256, rate limit per chiave, nessuna interfaccia `TokenVerifier` finché serve un solo meccanismo); `authctl`.
 
 Accettazione: un client MCP di test elenca i tool, ne chiama almeno tre con successo, riceve rifiuto senza token o con token revocato, e riceve errore strutturato su input fuori limite; nessun log contiene token o consumi.
 
 ## Fase 6: deployment
 
-Fai: unit e timer systemd con hardening, utenti separati, configurazione di `cloudflared` come da §12 (Tunnel come default; `Caddyfile` come alternativa documentata), README con setup, rotazione delle chiavi, ripristino.
+Fai: unit e timer systemd con hardening, utenti separati, configurazione di `cloudflared` come da §12 (solo Tunnel, nessun reverse proxy locale), README con setup, gestione delle chiavi, ripristino.
 
 Accettazione: da una VM pulita, seguendo il README, ETL e server partono; l'origine non è raggiungibile se non attraverso Cloudflare.
 
 ## Fuori scope finché l'utente non lo chiede
 
-Spesa totale stimata con le componenti regolate (fase B, §9) e OAuth con IdP esterno (§11).
+Spesa totale stimata con le componenti regolate (fase B, §9), PUN giornaliero dal GME (§4) e OAuth con IdP esterno (§11).
