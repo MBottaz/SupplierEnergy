@@ -292,3 +292,48 @@ def test_pun_url_non_ammesso(tmp_path: Path, capsys: pytest.CaptureFixture[str])
     )
     errore = json.loads(capsys.readouterr().err)
     assert errore["codice"] == "url_non_ammesso"
+
+
+def test_pun_aggiorna_con_swap_e_preserva_le_offerte(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Il PUN passa dallo stesso percorso atomico dell'ETL: il DB si riscrive solo se ok."""
+    db = tmp_path / "offerte.db"
+    assert main(["locale", "--db", str(db), "--raw", str(FIXTURE), "--snapshot", "2026-10-14"]) == 0
+    capsys.readouterr()
+
+    assert main(["pun", "--db", str(db), "--file", str(PUN)]) == 0
+    capsys.readouterr()
+
+    with sqlite3.connect(db) as conn:
+        assert conn.execute("SELECT count(*) FROM offerta").fetchone() == (1,)
+        assert conn.execute("SELECT count(*) FROM pun").fetchone() == (4,)
+    assert (tmp_path / "offerte.db.prev").is_file()
+    assert not (tmp_path / "offerte.db.new").exists()
+
+
+def test_pun_non_tocca_il_db_in_caso_di_errore(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    db = tmp_path / "offerte.db"
+    assert main(["locale", "--db", str(db), "--raw", str(FIXTURE), "--snapshot", "2026-10-14"]) == 0
+    capsys.readouterr()
+    assert main(["pun", "--db", str(db), "--file", str(PUN)]) == 0
+    capsys.readouterr()
+
+    with sqlite3.connect(db) as conn:
+        offerte_prima = conn.execute("SELECT count(*) FROM offerta").fetchone()[0]
+        pun_prima = conn.execute("SELECT count(*) FROM pun").fetchone()[0]
+    assert offerte_prima == 1
+    assert pun_prima == 4
+
+    rotto = tmp_path / "rotto.csv"
+    rotto.write_text("nome;valore\r\nx;1\r\n", encoding="utf-8")
+    assert main(["pun", "--db", str(db), "--file", str(rotto)]) == 1
+    assert json.loads(capsys.readouterr().err)["codice"] == "pun_non_valido"
+
+    with sqlite3.connect(db) as conn:
+        assert conn.execute("SELECT count(*) FROM offerta").fetchone()[0] == offerte_prima
+        assert conn.execute("SELECT count(*) FROM pun").fetchone()[0] == pun_prima
+        assert conn.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
+    assert not (tmp_path / "offerte.db.new").exists()

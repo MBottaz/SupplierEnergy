@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import shutil
 import sqlite3
 from dataclasses import dataclass
 from datetime import date, timedelta
@@ -27,7 +28,7 @@ from defusedxml.common import DefusedXmlException
 from etl.caricamento import EsitoCaricamento, carica_offerte
 from etl.db import apri_db
 from etl.parametri import carica_parametri
-from etl.pun import serie_mensile
+from etl.pun import EsitoPun, carica_pun, serie_mensile
 from etl.tempo import FUSO, oggi
 
 #: Oltre questa soglia (frazione della esecuzione precedente) lo swap è bloccato.
@@ -168,6 +169,67 @@ def esegui(
         sha256=sha256,
         percorsi_sconosciuti=caricate.percorsi_sconosciuti,
         etl_run_id=etl_run_id,
+    )
+
+
+@dataclass(frozen=True)
+class EsitoPunEsecuzione:
+    """Esito dell'aggiornamento del PUN: dati letti e swap avvenuto."""
+
+    esito: str
+    db: Path
+    codice: str | None = None
+    n_righe: int = 0
+    n_scartate: int = 0
+    serie: str = ""
+    prima: str | None = None
+    ultima: str | None = None
+
+
+def esegui_pun(percorso_pun: str | Path, *, db: str | Path) -> EsitoPunEsecuzione:
+    """Aggiorna il PUN in un DB nuovo e fa lo swap atomico (§8).
+
+    Il PUN è uno storico che si accumula: si parte da una copia del DB in uso
+    (offerte comprese) e si aggiorna solo `pun`. Il DB in uso non viene mai
+    toccato in place; se il file non è valido, la copia viene eliminata e
+    l'esito è "errore" con un codice stabile.
+    """
+    percorso_db = Path(db)
+    nuovo = percorso_db.with_name(percorso_db.name + ".new")
+    nuovo.unlink(missing_ok=True)
+    if percorso_db.is_file():
+        shutil.copy2(percorso_db, nuovo)
+
+    conn = apri_db(nuovo)
+    codice: str | None = None
+    esito_pun: EsitoPun | None = None
+    try:
+        try:
+            esito_pun = carica_pun(conn, percorso_pun)
+            _controlla_integrita(conn)
+            conn.commit()
+        except ValueError:
+            codice = "pun_non_valido"
+        except OSError:
+            codice = "file_non_leggibile"
+        except sqlite3.Error:
+            codice = "errore_interno"
+    finally:
+        conn.close()
+
+    if codice is not None or esito_pun is None:
+        nuovo.unlink(missing_ok=True)
+        return EsitoPunEsecuzione(esito="errore", db=percorso_db, codice=codice or "errore_interno")
+
+    _swap(percorso_db, nuovo)
+    return EsitoPunEsecuzione(
+        esito="ok",
+        db=percorso_db,
+        n_righe=esito_pun.n_righe,
+        n_scartate=esito_pun.n_scartate,
+        serie=esito_pun.serie,
+        prima=esito_pun.prima,
+        ultima=esito_pun.ultima,
     )
 
 

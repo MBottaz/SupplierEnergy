@@ -7,8 +7,8 @@
   fare) e poi esegue l'ETL.
 - `python -m etl pun --db DB [--file CSV | --url URL] [--raw-dir raw]`
   aggiorna il PUN mensile (serie `PUN_MENSILE`) dal CSV "Prezzi storici" del
-  Portale Offerte, senza ricostruire il resto del DB: è uno storico che si
-  accumula tra le ricostruzioni.
+  Portale Offerte, senza ricostruire le offerte: parte da una copia del DB in
+  uso e fa lo stesso swap atomico dell'ETL (è uno storico che si accumula).
 
 L'output è JSON; gli errori hanno `codice` e `messaggio`, senza dettagli interni.
 """
@@ -23,7 +23,6 @@ from collections.abc import Callable, Sequence
 from contextlib import AbstractContextManager
 from typing import Any
 
-from etl.db import apri_db
 from etl.download import (
     HOST_AMMESSI,
     DownloadFallito,
@@ -32,8 +31,8 @@ from etl.download import (
     pulisci_vecchi,
     scarica,
 )
-from etl.esegui import EsitoEsecuzione, esegui, ultimo_run
-from etl.pun import URL_PUN, carica_pun, nome_file_raw
+from etl.esegui import EsitoEsecuzione, esegui, esegui_pun, ultimo_run
+from etl.pun import URL_PUN, nome_file_raw
 from etl.tempo import oggi
 
 #: URL open data indicato dall'utente (Portale Offerte, mercato libero elettrico).
@@ -196,9 +195,9 @@ def _pun(
 ) -> int:
     """Aggiorna il PUN mensile: da un file locale o scaricando il CSV del Portale.
 
-    Non ricostruisce il DB: scrive solo `pun`, con upsert sulla chiave
-    `(data, serie)`, così lo storico si accumula e un secondo caricamento non
-    duplica righe.
+    Non ricostruisce le offerte: parte da una copia del DB in uso e passa dallo
+    stesso swap atomico dell'ETL, con upsert sulla chiave `(data, serie)`, così
+    lo storico si accumula e un secondo caricamento non duplica righe.
     """
     percorso = opzioni.file
     sha256 = None
@@ -221,25 +220,14 @@ def _pun(
         assert scaricato.percorso is not None
         percorso, sha256 = scaricato.percorso, scaricato.sha256
 
-    try:
-        conn = apri_db(opzioni.db)
-    except sqlite3.Error:
-        return _errore("db_non_apribile")
-    try:
-        esito = carica_pun(conn, percorso)
-    except ValueError:
-        return _errore("pun_non_valido")
-    except OSError:
-        return _errore("file_non_leggibile")
-    except sqlite3.Error:
-        return _errore("errore_interno")
-    finally:
-        conn.close()
+    esito = esegui_pun(percorso, db=opzioni.db)
+    if esito.esito == "errore":
+        return _errore(esito.codice or "errore_interno")
 
     _stampa(
         {
             "esito": "ok",
-            "db": str(opzioni.db),
+            "db": str(esito.db),
             "serie": esito.serie,
             "n_righe": esito.n_righe,
             "n_scartate": esito.n_scartate,

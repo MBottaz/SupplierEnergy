@@ -84,7 +84,7 @@ Normalizzazione:
 - prezzi letti con `Decimal`, salvati REAL, con l'unità di misura originale;
 - testo libero dei venditori: rimuovi caratteri di controllo e tronca.
 
-Il DB si ricostruisce da zero a ogni esecuzione dall'ultimo raw, copiando dal precedente solo `parametro`, `pun` ed `etl_run`.
+Il DB si ricostruisce da zero a ogni esecuzione dall'ultimo raw, copiando dal precedente solo `parametro`, `pun` ed `etl_run`. L'aggiornamento del solo PUN (`python -m etl pun`) non ricostruisce le offerte: parte da una copia del DB in uso, aggiorna `pun` e passa dallo stesso swap atomico, così anche questo comando non modifica mai in place il DB in uso.
 
 ## 7. File dei parametri
 

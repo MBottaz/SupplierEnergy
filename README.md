@@ -10,7 +10,7 @@ XML/CSV files ──> download ──> streaming parser ──> SQLite database
                          validation + atomic database swap
 ```
 
-The ETL builds `offerte.db.new`, validates it, and replaces the active database only when the checks pass. The previous database is kept as `offerte.db.prev`. Raw downloads are stored by date under `raw/`.
+The ETL builds `offerte.db.new`, validates it, and replaces the active database only when the checks pass. The previous database is kept as `offerte.db.prev`. The PUN-only update uses the same swap: it copies the active database, updates `pun`, and replaces it only if the copy passes the integrity check. Raw downloads are stored by date under `raw/`.
 
 The XML parser is streaming and hardened against DTD/external entities. Unknown XML paths are preserved in `extra_json` and reported instead of stopping the load. Prices are parsed with `Decimal` and stored in SQLite as `REAL`.
 
@@ -70,7 +70,8 @@ Download the current XML from the allowlisted Portale Offerte host and load it:
 just etl-scarica
 ```
 
-Update the PUN series without rebuilding the offers database:
+Update the PUN series without reloading the offers (the command copies the
+active database and applies the same atomic swap as the ETL):
 
 ```bash
 just etl-pun                        # downloads the Portale Offerte CSV
