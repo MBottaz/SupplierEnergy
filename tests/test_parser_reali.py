@@ -1,8 +1,12 @@
 """Parser sui dati reali: percorsi del tracciato presenti nell'XML pubblicato.
 
-Il primo test lavora sull'XML completo in `raw/` (file non versionato): se non
-c'è, viene saltato. Gli altri usano frammenti XML scritti a mano per fissare
-il comportamento dei percorsi ripetuti e dei campi noti senza colonna.
+I primi due test lavorano sugli XML completi in `raw/` (file non versionati): se
+non ci sono, vengono saltati. I conteggi sono ancorati allo snapshot del
+2026-10-14 documentato in `docs/validazione_xml.md`, così non cambiano a ogni
+scarico; l'ultimo raw scaricato è usato invece per il controllo strutturale
+(nessun percorso sconosciuto). Gli altri test usano frammenti XML scritti a mano
+per fissare il comportamento dei percorsi ripetuti e dei campi noti senza
+colonna.
 """
 
 from __future__ import annotations
@@ -19,7 +23,16 @@ RAW = Path(__file__).parent.parent / "raw"
 TESTA = '<offerta xmlns="http://www.acquirenteunico.it/schemas/SII_AU/OffertaRetail/01">'
 
 
+#: Snapshot dell'XML validato a mano in `docs/validazione_xml.md`.
+SNAPSHOT = RAW / "2026-10-14" / "PO_Offerte_E_MLIBERO_20261014.xml"
+
+
 def trova_raw() -> Path | None:
+    """L'XML dello snapshot validato, se presente in `raw/AAAA-MM-GG/`."""
+    return SNAPSHOT if SNAPSHOT.is_file() else None
+
+
+def trova_raw_piu_recente() -> Path | None:
     """L'XML completo più recente in `raw/AAAA-MM-GG/`, se presente."""
     candidati = sorted(RAW.glob("*/PO_Offerte_E_MLIBERO_*.xml"))
     return candidati[-1] if candidati else None
@@ -39,10 +52,10 @@ def _offerta(corpo: str) -> Offerta:
 
 
 def test_percorsi_del_tracciato_e_nessuno_sconosciuto() -> None:
-    """Ogni percorso dell'XML pubblicato è noto: zero percorsi sconosciuti."""
+    """Conteggi dello snapshot validato e zero percorsi sconosciuti."""
     percorso = trova_raw()
     if percorso is None:
-        pytest.skip("XML completo non presente in raw/")
+        pytest.skip("XML dello snapshot non presente in raw/")
 
     n_offerte = n_componenti = n_condizioni = 0
     senza_componenti = senza_chiave = offerte_con_modalita_ripetute = 0
@@ -101,6 +114,31 @@ def test_percorsi_del_tracciato_e_nessuno_sconosciuto() -> None:
     assert fasce == {"01", "02", "03", "07", "08", "91", None}
     assert offerte_con_modalita_ripetute > 0
     assert max_comuni == 659
+
+
+def test_nessun_percorso_sconosciuto_nell_ultimo_raw() -> None:
+    """L'ultimo XML scaricato non introduce percorsi fuori dal tracciato.
+
+    I conteggi possono cambiare tra uno scarico e l'altro; i percorsi no: se
+    compare un elemento non previsto il test lo nomina e fallisce.
+    """
+    percorso = trova_raw_piu_recente()
+    if percorso is None:
+        pytest.skip("XML completo non presente in raw/")
+
+    sconosciuti: set[str] = set()
+    n_offerte = n_senza_chiave = 0
+    for offerta in iter_offerte(percorso):
+        n_offerte += 1
+        sconosciuti |= offerta.percorsi_sconosciuti
+        if not (offerta.campi.get("piva") and offerta.campi.get("cod_offerta")):
+            n_senza_chiave += 1
+        assert offerta.campi.get("data_inizio"), "offerta senza data di inizio"
+        assert offerta.campi.get("data_fine"), "offerta senza data di fine"
+
+    assert n_offerte > 0
+    assert n_senza_chiave == 0
+    assert sconosciuti == set(), f"percorsi sconosciuti: {sorted(sconosciuti)}"
 
 
 def test_percorsi_ripetuti_vanno_in_lista_e_primo_valore_in_colonna() -> None:
