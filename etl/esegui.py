@@ -27,6 +27,7 @@ from defusedxml.common import DefusedXmlException
 from etl.caricamento import EsitoCaricamento, carica_offerte
 from etl.db import apri_db
 from etl.parametri import carica_parametri
+from etl.pun import serie_mensile
 from etl.tempo import FUSO, oggi
 
 #: Oltre questa soglia (frazione della esecuzione precedente) lo swap è bloccato.
@@ -247,15 +248,27 @@ def _controlla_chiavi(conn: sqlite3.Connection) -> None:
         raise _Blocco("chiavi_duplicate", [f"chiavi duplicate: {duplicate}"])
 
 
-def _nota_pun(conn: sqlite3.Connection) -> str | None:
-    riga = conn.execute("SELECT max(data) FROM pun").fetchone()
-    ultimo = riga[0] if riga is not None else None
-    if not isinstance(ultimo, str):
-        return None
-    limite = date.fromisoformat(oggi()) - timedelta(days=GIORNI_PUN_RECENTE)
-    if date.fromisoformat(ultimo[:10]) < limite:
-        return f"PUN fermo al {ultimo[:10]} (solo avviso)"
-    return None
+def _nota_pun(conn: sqlite3.Connection, *, giorno: str | None = None) -> str | None:
+    """Avvisa se una serie del PUN è troppo vecchia. Mai un blocco.
+
+    Le serie mensili si misurano a mese: un mese è pubblicato a mese concluso.
+    """
+    riferimento = date.fromisoformat(giorno or oggi())
+    avvisi: list[str] = []
+    for serie, ultimo in conn.execute("SELECT serie, max(data) FROM pun GROUP BY serie"):
+        if not isinstance(ultimo, str):
+            continue
+        if date.fromisoformat(ultimo[:10]) < _limite_pun(serie, riferimento):
+            avvisi.append(f"PUN {serie} fermo al {ultimo[:10]} (solo avviso)")
+    return "; ".join(avvisi) or None
+
+
+def _limite_pun(serie: str, riferimento: date) -> date:
+    """Data più vecchia accettabile per la serie: sotto questa si avvisa."""
+    if serie_mensile(serie):
+        # primo giorno del mese precedente: il mese in corso non è concluso
+        return (riferimento.replace(day=1) - timedelta(days=1)).replace(day=1)
+    return riferimento - timedelta(days=GIORNI_PUN_RECENTE)
 
 
 def _parametri_mancanti(conn: sqlite3.Connection) -> tuple[str, ...]:
