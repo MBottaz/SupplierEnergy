@@ -386,6 +386,13 @@ creare il DB temporaneo, invocare `cerca_offerte` come client MCP e verificare
 l'intero JSON di risposta. Il test deve passare su una macchina senza dati in
 `build/` e senza accesso alla rete.
 
+**Stato: completato.** `tests/test_mcp_stdio.py` avvia `python -m offerte.mcp`
+come processo figlio con `StdioServerParameters` (harness ufficiale del SDK),
+usa un DB temporaneo creato dallo schema reale e invoca `cerca_offerte` come
+client MCP: verifica l'intero JSON senza filtri (offerta con zone singole e
+offerta con zone ripetute), il filtro geografico su lista e l'errore strutturato.
+Nessun uso di `build/`, nessuna rete. `just check` verde.
+
 ---
 
 ### T6 — Trasporto HTTP locale opzionale, dopo stdio

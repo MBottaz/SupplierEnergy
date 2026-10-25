@@ -22,7 +22,7 @@ The XML parser is streaming and hardened against DTD/external entities. Unknown 
 | `etl/schema.sql` | SQLite schema for offers, components, conditions, parameters, decodings, PUN, and ETL runs. |
 | `etl/pun.py` | Monthly PUN from the Portale Offerte "Prezzi storici" CSV (`PUN_MENSILE` series); it accumulates across database rebuilds. |
 | `offerte/` | Single non-ETL package: read-only query and calculation library, with the CLI, MCP server, and API-key management as submodules (`offerte.cli`, `offerte.mcp`, `offerte.auth`). `offerte.db` is the only read-only database entry point (`mode=ro` plus `PRAGMA query_only=ON`); `offerte.ricerca.cerca_offerte` is the shared application search function; `offerte.mcp` is the MCP server exposing it as the `cerca_offerte` tool with structured errors. |
-| `tests/` | Unit and integration tests, including XML security, ETL swap cases, and MCP tool discovery. |
+| `tests/` | Unit and integration tests, including XML security, ETL swap cases, MCP tool discovery, and an MCP stdio integration test with the official client. |
 | `docs/` | Architecture, the `cerca_offerte` contract, XML validation, open questions, and the tracked parameter fixture. |
 | `build/` | Local generated database files; ignored by Git. |
 | `raw/` | Local dated XML downloads; ignored by Git. |
