@@ -422,6 +422,14 @@ i test MCP sono verdi.
   avvio.
 - Chiudere sempre il server al termine del test.
 
+**Stato: completato.** `offerte.mcp` accetta `--trasporto http` (default
+`stdio`), `--host` e `--port`. `valida_host` ammette solo
+`127.0.0.1`/`::1`/`localhost` e rifiuta `0.0.0.0` o interfacce pubbliche con
+exit code 2 e messaggio su stderr. `tests/test_mcp_http.py` avvia il server su
+una porta libera, elenca e chiama il tool via HTTP, verifica il database
+invariato, chiude sempre il processo e controlla il rifiuto del bind non
+loopback. `just check` verde.
+
 ---
 
 ### T7 — Documentazione e comando di verifica

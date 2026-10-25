@@ -14,6 +14,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import sys
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Annotated, Any
@@ -28,6 +29,10 @@ from offerte.ricerca import cerca_offerte as esegui_ricerca
 
 #: Variabile d'ambiente per il percorso del database, se non si passa `--db`.
 VARIABILE_DB = "OFFERTE_DB"
+
+#: Host ammessi per il trasporto HTTP: solo loopback. `0.0.0.0`, `::` e
+#: qualunque interfaccia pubblica sono rifiutati prima di aprire la porta.
+HOST_AMMESSI = frozenset({"127.0.0.1", "::1", "localhost"})
 
 #: Descrizione del tool: è il contratto che un agente legge da `tools/list`.
 #: Deve bastare da sola (filtri, enum, limiti, semantica delle zone, limiti del
@@ -141,6 +146,16 @@ def crea_server(percorso_db: str | Path | None = None) -> MCPServer:
     return server
 
 
+def valida_host(host: str) -> str:
+    """Accetta solo interfacce di loopback; solleva `ValueError` altrimenti."""
+    if host not in HOST_AMMESSI:
+        raise ValueError(
+            f"host non ammesso: il trasporto HTTP ascolta solo su loopback "
+            f"({' o '.join(sorted(HOST_AMMESSI))}), non su {host!r}"
+        )
+    return host
+
+
 def _argomenti(argv: Sequence[str] | None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         prog="python -m offerte.mcp",
@@ -151,14 +166,42 @@ def _argomenti(argv: Sequence[str] | None) -> argparse.Namespace:
         default=None,
         help=f"Percorso del database (default: ${VARIABILE_DB} o {NOME_DB_DEFAULT}).",
     )
+    parser.add_argument(
+        "--trasporto",
+        choices=("stdio", "http"),
+        default="stdio",
+        help="stdin/stdout (default) o HTTP streamable locale.",
+    )
+    parser.add_argument(
+        "--host",
+        default="127.0.0.1",
+        help="Interfaccia di ascolto HTTP; solo loopback (default: 127.0.0.1).",
+    )
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=8000,
+        help="Porta di ascolto HTTP (default: 8000).",
+    )
     return parser.parse_args(argv)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    """Avvia il server su trasporto stdio. Blocca finché il client è connesso."""
+    """Avvia il server. Blocca finché il client è connesso."""
     argomenti = _argomenti(argv)
     server = crea_server(argomenti.db)
-    server.run(transport="stdio")
+
+    if argomenti.trasporto == "stdio":
+        server.run(transport="stdio")
+        return 0
+
+    try:
+        host = valida_host(argomenti.host)
+    except ValueError as errore:
+        print(str(errore), file=sys.stderr)
+        return 2
+
+    server.run(transport="streamable-http", host=host, port=argomenti.port)
     return 0
 
 
