@@ -9,6 +9,11 @@ dependencies = [
     # DTD, entità e documenti gonfiati (XXE / billion laughs). `lxml`
     # risolverebbe lo stesso problema ma aggiunge una dipendenza C compilata.
     "defusedxml==0.7.1",
+    # SDK ufficiale MCP (linea v2, documentazione py.sdk.modelcontextprotocol.io):
+    # server `MCPServer`, trasporti stdio e streamable HTTP e client in-memory
+    # per i test. Serve anche per gli agenti remoti; nessun framework web
+    # aggiuntivo. Istallato senza l'extra `cli`: l'Inspector non ci serve.
+    "mcp==2.3.0",
 ]
 
 [dependency-groups]

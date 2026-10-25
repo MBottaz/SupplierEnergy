@@ -21,9 +21,9 @@ The XML parser is streaming and hardened against DTD/external entities. Unknown 
 | `etl/` | Download, XML parsing, CSV parameter loading, PUN loading, schema, validation, and atomic swap. Entry point: `python -m etl`. |
 | `etl/schema.sql` | SQLite schema for offers, components, conditions, parameters, decodings, PUN, and ETL runs. |
 | `etl/pun.py` | Monthly PUN from the Portale Offerte "Prezzi storici" CSV (`PUN_MENSILE` series); it accumulates across database rebuilds. |
-| `offerte/` | Single non-ETL package: read-only query and calculation library, with the CLI, MCP server, and API-key management as submodules (`offerte.cli`, `offerte.mcp`, `offerte.auth`). Currently only the package skeleton. |
-| `tests/` | Unit and integration tests, including XML security and ETL swap cases. |
-| `docs/` | Architecture, XML validation, open questions, and the tracked parameter fixture. |
+| `offerte/` | Single non-ETL package: read-only query and calculation library, with the CLI, MCP server, and API-key management as submodules (`offerte.cli`, `offerte.mcp`, `offerte.auth`). Currently `offerte.mcp` declares the MCP server and the only `cerca_offerte` tool; the query library is not wired yet. |
+| `tests/` | Unit and integration tests, including XML security, ETL swap cases, and MCP tool discovery. |
+| `docs/` | Architecture, the `cerca_offerte` contract, XML validation, open questions, and the tracked parameter fixture. |
 | `build/` | Local generated database files; ignored by Git. |
 | `raw/` | Local dated XML downloads; ignored by Git. |
 
@@ -103,6 +103,6 @@ Commands print structured JSON. A failed validation leaves the active database u
 
 ## Current scope
 
-The implemented scope is the ETL (offers, parameters, and the monthly PUN series) and its validation on the fixture and real XML summary. The query library, CLI, MCP server, authentication, and deployment units are planned work, not runnable features yet; the daily PUN series (GME) is out of scope for now.
+The implemented scope is the ETL (offers, parameters, and the monthly PUN series), its validation on the fixture and real XML summary, and the first MCP server skeleton: `mcp==2.3.0` (official Python SDK, v2 line) and a `cerca_offerte` tool that can be discovered but is not yet connected to the query library. The query library, CLI, authentication, and deployment units are planned work, not runnable features yet; the daily PUN series (GME) is out of scope for now.
 
-Read `docs/architettura.md` for the design and data model, `PROMPT.md` for the planned phases, `docs/validazione_xml.md` for the aggregate validation of the real XML, and `docs/questioni_aperte.md` for unresolved source and calculation questions.
+Read `docs/architettura.md` for the design and data model, `docs/contratto_cerca_offerte.md` for the `cerca_offerte` contract, `PROMPT.md` for the planned phases, `docs/validazione_xml.md` for the aggregate validation of the real XML, and `docs/questioni_aperte.md` for unresolved source and calculation questions.
