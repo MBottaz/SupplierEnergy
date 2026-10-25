@@ -467,6 +467,24 @@ creazione/caricamento fixture → avvio server → list tools → cerca_offerte
 La task è conclusa solo se il percorso funziona senza rete e senza modificare il
 DB.
 
+**Stato: completato.** `README.md` documenta il server MCP (comandi stdio e HTTP
+loopback, `$OFFERTE_DB`, filtro di validità, errore strutturato, sola lettura) e
+ribadisce che autenticazione, calcolo, tool aggiuntivi e deployment sono fuori
+scope. Aggiornata la sezione comandi di `AGENTS.md`. `just check` è il comando
+unico di verifica e include i test MCP; nessun comando non verificato è stato
+documentato.
+
+Verifica manuale (senza rete):
+
+1. `just etl-fixture` → `build/offerte.db` con 1 offerta; il server stdio
+   elenca `['cerca_offerte']` e risponde con un JSON valido. L'offerta della
+   fixture è scaduta (2026-10-10), quindi con il filtro di default la ricerca
+   restituisce 0 risultati: comportamento corretto e documentato nel README.
+2. DB temporaneo con offerte valide → stesso percorso, `cerca_offerte` con
+   filtro `regione = "piemonte"` restituisce 1 risultato con le zone ripetute e
+   il campo `testo_venditore_non_fidato`; l'hash del DB non cambia dopo le
+   chiamate.
+
 ---
 
 ## 6. Criterio di accettazione complessivo

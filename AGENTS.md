@@ -38,4 +38,5 @@ Mantieni questa sezione aggiornata man mano che esistono:
 - `just etl-scarica` — scarica l'XML open data del giorno e carica il DB (rete).
 - `just etl-pun` — scarica il CSV "Prezzi storici" e aggiorna il PUN mensile (rete).
 - `just etl-pun-file PERCORSO` — carica il PUN mensile da un CSV già scaricato.
-- `just serve-local` — server MCP locale: non esiste ancora (fase 5).
+- `just test` — include i test MCP (scoperta del tool, chiamate in-memory, integrazione stdio, HTTP locale).
+- `uv run python -m offerte.mcp --db build/offerte.db` — server MCP in sola lettura su stdio; con `--trasporto http` ascolta solo su loopback (`127.0.0.1`).
