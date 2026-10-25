@@ -14,6 +14,10 @@ dependencies = [
     # per i test. Serve anche per gli agenti remoti; nessun framework web
     # aggiuntivo. Istallato senza l'extra `cli`: l'Inspector non ci serve.
     "mcp==2.3.0",
+    # Usato direttamente dal frontend MCP per lo schema degli input (`Field`,
+    # `BaseModel`): stessa versione che `mcp` richiede, dichiarata perché il
+    # codice la importa.
+    "pydantic==2.14.1",
 ]
 
 [dependency-groups]
