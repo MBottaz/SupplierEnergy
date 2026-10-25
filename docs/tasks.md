@@ -311,6 +311,16 @@ Aggiungere test unitari per:
 - input fuori limite e con tipo errato;
 - testo geografico ripetuto in lista JSON.
 
+**Stato: completato.** Aggiunta `offerte/ricerca.py` con
+`cerca_offerte(conn, filtri)`: validazione centralizzata (chiavi ammesse, tipi,
+lunghezze, codici a due cifre, `limit` 1–50), query parametrizzate con
+`json_each` per le zone (valore singolo o lista), `casefold` Unicode registrato
+su SQLite per maiuscole/accenti, escape di `LIKE`, filtro di default su
+`data_fine` (nulla = valida, `data_inizio` non filtrata), ordinamento
+`piva`/`cod_offerta`, troncamento, `dati_aggiornati_al` e `avvertenze`.
+`tests/test_ricerca.py` copre tutti i casi della checklist (27 test).
+`just check` verde.
+
 ---
 
 ### T4 — Server MCP su trasporto stdio
