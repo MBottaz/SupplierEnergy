@@ -262,6 +262,16 @@ Scrivere test che:
    errore;
 5. verifichino il comportamento per file inesistente o non leggibile.
 
+**Stato: completato.** Aggiunti `offerte/errori.py` (errori strutturati con
+codice stabile) e `offerte/db.py` (`apri_db`, l'unico punto di apertura:
+`mode=ro`, `PRAGMA query_only=ON`, `row_factory`, chiusura garantita; file
+mancante, non leggibile o non-database → `database_non_disponibile` senza
+percorsi nel messaggio). Test in `tests/test_db.py` con database temporanei
+costruiti dallo schema reale (`tests/fixture_db.py`): ricerca base,
+query_only attivo, scrittura rifiutata, database invariato dopo ricerca ed
+errore, file inesistente/directory/non-database/non leggibile. `just check`
+verde.
+
 ---
 
 ### T3 — Funzione applicativa condivisa di ricerca
