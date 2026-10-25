@@ -21,7 +21,7 @@ The XML parser is streaming and hardened against DTD/external entities. Unknown 
 | `etl/` | Download, XML parsing, CSV parameter loading, PUN loading, schema, validation, and atomic swap. Entry point: `python -m etl`. |
 | `etl/schema.sql` | SQLite schema for offers, components, conditions, parameters, decodings, PUN, and ETL runs. |
 | `etl/pun.py` | Monthly PUN from the Portale Offerte "Prezzi storici" CSV (`PUN_MENSILE` series); it accumulates across database rebuilds. |
-| `offerte/` | Single non-ETL package: read-only query and calculation library, with the CLI, MCP server, and API-key management as submodules (`offerte.cli`, `offerte.mcp`, `offerte.auth`). `offerte.db` is the only read-only database entry point (`mode=ro` plus `PRAGMA query_only=ON`); `offerte.ricerca.cerca_offerte` is the shared application search function; `offerte.mcp` declares the MCP server and the `cerca_offerte` tool (not wired to the function yet). |
+| `offerte/` | Single non-ETL package: read-only query and calculation library, with the CLI, MCP server, and API-key management as submodules (`offerte.cli`, `offerte.mcp`, `offerte.auth`). `offerte.db` is the only read-only database entry point (`mode=ro` plus `PRAGMA query_only=ON`); `offerte.ricerca.cerca_offerte` is the shared application search function; `offerte.mcp` is the MCP server exposing it as the `cerca_offerte` tool with structured errors. |
 | `tests/` | Unit and integration tests, including XML security, ETL swap cases, and MCP tool discovery. |
 | `docs/` | Architecture, the `cerca_offerte` contract, XML validation, open questions, and the tracked parameter fixture. |
 | `build/` | Local generated database files; ignored by Git. |
@@ -103,6 +103,6 @@ Commands print structured JSON. A failed validation leaves the active database u
 
 ## Current scope
 
-The implemented scope is the ETL (offers, parameters, and the monthly PUN series), its validation on the fixture and real XML summary, the read-only database access layer, the shared `cerca_offerte` search function (filters, limits, stable ordering, structured errors), and the first MCP server skeleton: `mcp==2.3.0` (official Python SDK, v2 line) and a `cerca_offerte` tool that can be discovered but is not yet connected to the search function. The CLI, cost calculation, authentication, and deployment units are planned work, not runnable features yet; the daily PUN series (GME) is out of scope for now.
+The implemented scope is the ETL (offers, parameters, and the monthly PUN series), its validation on the fixture and real XML summary, the read-only database access layer, the shared `cerca_offerte` search function (filters, limits, stable ordering, structured errors), and the MCP server on stdio (`mcp==2.3.0`, official Python SDK v2 line) that exposes `cerca_offerte` with structured errors while keeping the database read-only. The CLI, cost calculation, authentication, and deployment units are planned work, not runnable features yet; the daily PUN series (GME) is out of scope for now.
 
 Read `docs/architettura.md` for the design and data model, `docs/contratto_cerca_offerte.md` for the `cerca_offerte` contract, `PROMPT.md` for the planned phases, `docs/validazione_xml.md` for the aggregate validation of the real XML, and `docs/questioni_aperte.md` for unresolved source and calculation questions.

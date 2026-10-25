@@ -1,8 +1,8 @@
 """Server MCP minimale: espone `cerca_offerte` in sola lettura.
 
 Strato sottile: la validazione e la ricerca stanno nella funzione applicativa
-condivisa (`offerte.ricerca`), riusabile anche dalla futura CLI. Qui si traduce
-solo l'ingresso/uscita del protocollo MCP.
+condivisa (`offerte.ricerca.cerca_offerte`), riusabile anche dalla futura CLI.
+Qui si traduce solo l'ingresso/uscita del protocollo MCP e l'errore strutturato.
 
 L'SDK ufficiale (`mcp==2.3.0`) è l'unica dipendenza oltre alla libreria: nessun
 framework web aggiuntivo. Il trasporto di default è stdio; quello HTTP
@@ -11,12 +11,23 @@ streamable, quando richiesto, ascolta solo su `127.0.0.1`.
 
 from __future__ import annotations
 
+import argparse
+import json
+import os
+from collections.abc import Sequence
+from pathlib import Path
 from typing import Annotated, Any
 
 from mcp.server import MCPServer
-from mcp.server.mcpserver.exceptions import ToolError
-from mcp.types import CallToolResult, ToolAnnotations
+from mcp.types import CallToolResult, TextContent, ToolAnnotations
 from pydantic import BaseModel, ConfigDict, Field
+
+from offerte.db import NOME_DB_DEFAULT, apri_db
+from offerte.errori import ErroreOfferte
+from offerte.ricerca import cerca_offerte as esegui_ricerca
+
+#: Variabile d'ambiente per il percorso del database, se non si passa `--db`.
+VARIABILE_DB = "OFFERTE_DB"
 
 #: Descrizione del tool: è il contratto che un agente legge da `tools/list`.
 #: Deve bastare da sola (filtri, enum, limiti, semantica delle zone, limiti del
@@ -81,8 +92,25 @@ class Filtri(BaseModel):
     ] = None
 
 
-def crea_server() -> MCPServer:
+def percorso_db_da_ambiente() -> Path:
+    """Percorso del database: `--db`, poi `OFFERTE_DB`, poi `build/offerte.db`."""
+    return Path(os.environ.get(VARIABILE_DB, NOME_DB_DEFAULT))
+
+
+def _risultato_errore(errore: ErroreOfferte) -> CallToolResult:
+    """Errore strutturato, senza stack trace né percorsi interni."""
+    dati = errore.come_dizionario()
+    return CallToolResult(
+        content=[TextContent(type="text", text=json.dumps(dati, ensure_ascii=False))],
+        structured_content=dati,
+        is_error=True,
+    )
+
+
+def crea_server(percorso_db: str | Path | None = None) -> MCPServer:
     """Costruisce il server MCP con l'unico tool di questa iterazione."""
+    database = Path(percorso_db) if percorso_db is not None else percorso_db_da_ambiente()
+
     server = MCPServer(
         "offerte",
         instructions=(
@@ -98,7 +126,41 @@ def crea_server() -> MCPServer:
         annotations=ToolAnnotations(read_only_hint=True, open_world_hint=False),
     )
     def cerca_offerte(filtri: Filtri | None = None) -> CallToolResult:
-        # T4 collega questo corpo a `offerte.ricerca.cerca_offerte`.
-        raise ToolError("cerca_offerte non è ancora collegata alla libreria")
+        """Delega interamente a `offerte.ricerca.cerca_offerte`."""
+        try:
+            with apri_db(database) as conn:
+                risultato = esegui_ricerca(conn, (filtri or Filtri()).model_dump())
+        except ErroreOfferte as errore:
+            return _risultato_errore(errore)
+
+        return CallToolResult(
+            content=[TextContent(type="text", text=json.dumps(risultato, ensure_ascii=False))],
+            structured_content=risultato,
+        )
 
     return server
+
+
+def _argomenti(argv: Sequence[str] | None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        prog="python -m offerte.mcp",
+        description="Server MCP delle offerte luce (sola lettura).",
+    )
+    parser.add_argument(
+        "--db",
+        default=None,
+        help=f"Percorso del database (default: ${VARIABILE_DB} o {NOME_DB_DEFAULT}).",
+    )
+    return parser.parse_args(argv)
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    """Avvia il server su trasporto stdio. Blocca finché il client è connesso."""
+    argomenti = _argomenti(argv)
+    server = crea_server(argomenti.db)
+    server.run(transport="stdio")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

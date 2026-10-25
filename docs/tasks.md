@@ -353,6 +353,14 @@ Usare il client/test client MCP per verificare che:
 6. una chiamata con input errato restituisca un errore strutturato;
 7. il processo non scriva sul database.
 
+**Stato: completato (esclusa la verifica stdio, in T5).** `offerte/mcp.py` collega
+il tool a `offerte.ricerca.cerca_offerte` e traduce gli errori in un risultato
+con `isError = true` e `structuredContent` `{codice, messaggio}`. Il percorso del
+database arriva da `--db` o da `OFFERTE_DB`. Aggiunti
+`tests/test_mcp_cerca_offerte.py` (client in-memory: chiamata valida, senza
+filtri, nessun risultato, errori strutturati, database assente, database
+invariato) e `main()` su stdio. `just check` verde.
+
 ---
 
 ### T5 — Fixture e test d'integrazione MCP
