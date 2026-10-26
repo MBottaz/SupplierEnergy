@@ -22,11 +22,14 @@ valide ordinate per `piva`, `cod_offerta`.
 | `regione` | stringa | Corrispondenza esatta, senza distinzione fra maiuscole e minuscole, con `offerta/ZoneOfferta/REGIONE` in `extra_json`. |
 | `provincia` | stringa | Come `regione`, con `offerta/ZoneOfferta/PROVINCIA`. |
 | `comune` | stringa | Come `regione`, con `offerta/ZoneOfferta/COMUNE`. |
-| `tipo_cliente` | stringa | Codice del tracciato a due cifre (`01` domestico, `02` altri usi, `03` condominio uso domestico – gas). |
-| `tipo_offerta` | stringa | Codice del tracciato a due cifre (`01` fisso, `02` variabile, `03` FLAT, `04` mista). |
+| `tipo_cliente` | stringa | Una delle etichette `domestico`, `altri usi`, `condominio uso domestico (gas)`. Le etichette vengono convertite internamente nei codici del tracciato. |
+| `tipo_offerta` | stringa | Una delle etichette `fisso`, `variabile`, `flat`, `mista`. Le etichette vengono convertite internamente nei codici del tracciato. |
 | `indicizzata` | booleano | `true` se `idx_prezzo_energia` è presente, `false` se è assente. |
 | `testo` | stringa | Sottostringa, senza distinzione fra maiuscole e minuscole, cercata in `nome` e `descrizione` dell'offerta. |
 | `limit` | intero | Numero massimo di risultati, da 1 a 50. Default 20. |
+
+I due filtri di tipo accettano le etichette indicate sopra; il risultato mantiene
+invece i codici ufficiali del tracciato per `tipo_cliente` e `tipo_offerta`.
 
 Per le zone geografiche l'ETL può aver raccolto **più valori** per la stessa
 offerta (percorsi XML ripetuti): la corrispondenza è vera se almeno uno dei
@@ -99,7 +102,7 @@ percorsi interni:
 
 | `codice` | Quando |
 |---|---|
-| `input_non_valido` | tipo JSON errato, stringa vuota o troppo lunga, `limit` fuori da 1–50, codice con formato non valido. |
+| `input_non_valido` | tipo JSON errato, stringa vuota o troppo lunga, `limit` fuori da 1–50, oppure etichetta di `tipo_cliente`/`tipo_offerta` non ammessa. Le etichette di questi due filtri non distinguono maiuscole e minuscole. |
 | `filtro_non_supportato` | chiave di `filtri` non prevista dalla tabella qui sopra. |
 | `database_non_disponibile` | database mancante, non leggibile o non apribile in sola lettura. |
 

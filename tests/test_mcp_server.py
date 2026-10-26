@@ -48,10 +48,25 @@ def test_il_server_espone_solo_cerca_offerte() -> None:
             assert filtri["type"] == "object"
             assert set(filtri["properties"]) == FILTRI_ATTESI
             assert filtri["additionalProperties"] is True
+            assert filtri["properties"]["tipo_cliente"]["enum"] == [
+                "domestico",
+                "altri usi",
+                "condominio uso domestico (gas)",
+            ]
+            assert filtri["properties"]["tipo_offerta"]["enum"] == [
+                "fisso",
+                "variabile",
+                "flat",
+                "mista",
+            ]
+            assert filtri["properties"]["indicizzata"]["enum"] == [True, False]
 
             descrizione = " ".join((tool.description or "").split())
             for nome in FILTRI_ATTESI:
                 assert nome in descrizione
             assert "Il nome commerciale NON è nel modello dati" in descrizione
+            assert "domestico" in descrizione
+            assert "altri usi" in descrizione
+            assert "variabile" in descrizione
 
     asyncio.run(scenario())

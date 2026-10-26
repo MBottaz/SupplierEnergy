@@ -125,7 +125,8 @@ uv run python -m offerte.mcp --db build/offerte.db --trasporto http --port 8000
 `cerca_offerte` filters, all optional, are passed inside a `filtri` object:
 `fornitore` (exact VAT number; the commercial name is not in the data model),
 `regione`, `provincia`, `comune` (case-insensitive exact match on the zones the
-offer declares), `tipo_cliente` and `tipo_offerta` (two-digit track codes),
+offer declares), `tipo_cliente` (`domestico`, `altri usi` or `condominio uso
+domestico (gas)`) and `tipo_offerta` (`fisso`, `variabile`, `flat` or `mista`),
 `indicizzata`, `testo` (searched in the offer name and description) and `limit`
 (1-50, default 20). Seller text is returned in fields marked as untrusted. Input
 errors come back as structured results (`{"codice": "...", "messaggio": "..."}`).

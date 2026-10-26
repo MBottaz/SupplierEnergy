@@ -83,6 +83,14 @@ def test_senza_filtri(db: Path) -> None:
     assert risultato.structured_content["numero_risultati"] == 2
 
 
+def test_filtri_con_etichetta_leggibile(db: Path) -> None:
+    risultato = _chiama(db, {"tipo_cliente": "domestico", "tipo_offerta": "variabile"})
+    assert risultato.is_error is False
+    assert risultato.structured_content is not None
+    assert risultato.structured_content["numero_risultati"] == 1
+    assert risultato.structured_content["risultati"][0]["cod_offerta"] == "A1"
+
+
 def test_nessun_risultato(db: Path) -> None:
     risultato = _chiama(db, {"fornitore": "00000000000"})
     assert risultato.is_error is False

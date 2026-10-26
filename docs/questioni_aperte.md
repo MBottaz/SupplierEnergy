@@ -60,6 +60,12 @@ indovina: qui sta cosa manca, cosa blocca e in quale fase si risolve.
     override con `--url`.
 11. **Metodologia ufficiale del Portale Offerte per la spesa totale** (fase B,
     fuori scope finché l'utente non lo chiede): va trovata e citata nel codice.
+12. **Mappatura P.IVA–nome del fornitore**: il tracciato delle offerte e il
+    modello attuale identificano il venditore con la P.IVA, ma non forniscono
+    una anagrafica commerciale affidabile. Prima di aggiungere una tabella
+    `fornitore` e popolarla con i venditori più noti serve una fonte ufficiale,
+    una data di aggiornamento e una politica per fusioni, cambi di nome e P.IVA
+    non riconosciute; non si inseriscono nomi indovinati o non verificati.
 
 ## Risolte
 

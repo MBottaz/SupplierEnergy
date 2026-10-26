@@ -12,7 +12,6 @@ istruzioni o messaggi generati.
 from __future__ import annotations
 
 import json
-import re
 import sqlite3
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
@@ -41,7 +40,27 @@ LIMIT_MASSIMO = 50
 MAX_LUNGHEZZA_FILTRO = 200
 
 _FUSO = ZoneInfo("Europe/Rome")
-_CODICE_DUE_CIFRE = re.compile(r"^\d{2}$")
+# Etichette dell'interfaccia pubblica, derivate dalle decodifiche ufficiali
+# dell'ETL (`etl/codifiche.py`). Le query continuano a usare i codici del DB.
+OPZIONI_TIPO_CLIENTE: tuple[str, ...] = (
+    "domestico",
+    "altri usi",
+    "condominio uso domestico (gas)",
+)
+_CODICI_TIPO_CLIENTE = {
+    "domestico": "01",
+    "altri usi": "02",
+    "condominio uso domestico (gas)": "03",
+}
+
+OPZIONI_TIPO_OFFERTA: tuple[str, ...] = ("fisso", "variabile", "flat", "mista")
+_CODICI_TIPO_OFFERTA = {
+    "fisso": "01",
+    "variabile": "02",
+    "flat": "03",
+    "mista": "04",
+}
+
 _ZONE: tuple[tuple[str, str], ...] = (
     ("regione", "REGIONE"),
     ("provincia", "PROVINCIA"),
@@ -95,11 +114,14 @@ def _valida(filtri: Mapping[str, object]) -> _Filtri:
             )
         return valore
 
-    def codice(nome: str) -> str | None:
+    def opzione(nome: str, opzioni: tuple[str, ...], codici: Mapping[str, str]) -> str | None:
         valore = stringa(nome)
-        if valore is not None and not _CODICE_DUE_CIFRE.match(valore):
-            raise InputNonValido(f"{nome} deve essere un codice di due cifre")
-        return valore
+        if valore is None:
+            return None
+        chiave = valore.casefold()
+        if chiave not in codici:
+            raise InputNonValido(f"{nome} deve essere uno di: {', '.join(opzioni)}")
+        return codici[chiave]
 
     indicizzata = filtri.get("indicizzata")
     if indicizzata is not None and not isinstance(indicizzata, bool):
@@ -118,8 +140,8 @@ def _valida(filtri: Mapping[str, object]) -> _Filtri:
         regione=stringa("regione"),
         provincia=stringa("provincia"),
         comune=stringa("comune"),
-        tipo_cliente=codice("tipo_cliente"),
-        tipo_offerta=codice("tipo_offerta"),
+        tipo_cliente=opzione("tipo_cliente", OPZIONI_TIPO_CLIENTE, _CODICI_TIPO_CLIENTE),
+        tipo_offerta=opzione("tipo_offerta", OPZIONI_TIPO_OFFERTA, _CODICI_TIPO_OFFERTA),
         indicizzata=indicizzata,
         testo=stringa("testo"),
         limit=limite,

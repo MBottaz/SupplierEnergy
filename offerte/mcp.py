@@ -25,6 +25,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from offerte.db import NOME_DB_DEFAULT, apri_db
 from offerte.errori import ErroreOfferte
+from offerte.ricerca import OPZIONI_TIPO_CLIENTE, OPZIONI_TIPO_OFFERTA
 from offerte.ricerca import cerca_offerte as esegui_ricerca
 
 #: Variabile d'ambiente per il percorso del database, se non si passa `--db`.
@@ -48,10 +49,9 @@ Tutti i filtri sono opzionali e vanno passati dentro `filtri`:
 - `regione`, `provincia`, `comune`: corrispondenza esatta, senza distinzione fra
   maiuscole e minuscole, con le zone dichiarate dall'offerta. Le offerte senza
   zone non corrispondono.
-- `tipo_cliente`: codice a due cifre del tracciato (`01` domestico, `02` altri
-  usi, `03` condominio uso domestico gas).
-- `tipo_offerta`: codice a due cifre del tracciato (`01` fisso, `02` variabile,
-  `03` FLAT, `04` mista).
+- `tipo_cliente`: una delle etichette `domestico`, `altri usi`, `condominio
+  uso domestico (gas)`.
+- `tipo_offerta`: una delle etichette `fisso`, `variabile`, `flat`, `mista`.
 - `indicizzata`: `true` se l'offerta ha un indice del prezzo energia, `false`
   se il prezzo è fisso.
 - `testo`: sottostringa, senza distinzione fra maiuscole e minuscole, cercata in
@@ -83,13 +83,25 @@ class Filtri(BaseModel):
     )
     comune: Annotated[Any, Field(description="Comune dichiarato dall'offerta (stringa).")] = None
     tipo_cliente: Annotated[
-        Any, Field(description="Codice tipo cliente a due cifre (es. '01', '02').")
+        Any,
+        Field(
+            description="Tipo cliente: domestico, altri usi o condominio uso domestico (gas).",
+            json_schema_extra={"enum": list(OPZIONI_TIPO_CLIENTE)},
+        ),
     ] = None
     tipo_offerta: Annotated[
-        Any, Field(description="Codice tipo offerta a due cifre (es. '01', '02', '04').")
+        Any,
+        Field(
+            description="Tipo offerta: fisso, variabile, flat o mista.",
+            json_schema_extra={"enum": list(OPZIONI_TIPO_OFFERTA)},
+        ),
     ] = None
     indicizzata: Annotated[
-        Any, Field(description="true per le offerte indicizzate, false per le fisse.")
+        Any,
+        Field(
+            description="true per le offerte indicizzate, false per le fisse.",
+            json_schema_extra={"enum": [True, False]},
+        ),
     ] = None
     testo: Annotated[Any, Field(description="Sottostringa cercata in nome e descrizione.")] = None
     limit: Annotated[

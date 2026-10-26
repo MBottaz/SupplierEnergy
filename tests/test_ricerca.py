@@ -146,15 +146,21 @@ def test_filtro_regione_con_accento(db: Path) -> None:
     assert _identificativi(_cerca(db, regione="forlì")) == [("33333333333", "C1")]
 
 
-def test_filtro_tipo_cliente(db: Path) -> None:
-    assert _identificativi(_cerca(db, tipo_cliente="02")) == [
+def test_filtro_tipo_cliente_con_etichetta(db: Path) -> None:
+    assert _identificativi(_cerca(db, tipo_cliente="altri usi")) == [
         ("11111111111", "A2"),
         ("33333333333", "C1"),
     ]
 
 
-def test_filtro_tipo_offerta(db: Path) -> None:
-    assert _identificativi(_cerca(db, tipo_offerta="04")) == [("22222222222", "B2")]
+def test_filtro_tipo_offerta_con_etichetta(db: Path) -> None:
+    assert _identificativi(_cerca(db, tipo_offerta="mista")) == [("22222222222", "B2")]
+
+
+def test_filtro_tipo_cliente_ignora_maiuscole_e_spazi_esterni(db: Path) -> None:
+    risultato = _cerca(db, tipo_cliente="  DOMESTICO ", limit=50)
+    assert {("11111111111", "A1"), ("22222222222", "B2")}.issubset(set(_identificativi(risultato)))
+    assert all(riga["tipo_cliente"] == "01" for riga in risultato["risultati"])
 
 
 def test_filtro_indicizzata(db: Path) -> None:
@@ -219,8 +225,9 @@ def test_validita_temporale(db: Path) -> None:
         {"limit": 51},
         {"limit": "venti"},
         {"limit": True},
-        {"tipo_cliente": "1"},
+        {"tipo_cliente": "01"},
         {"tipo_cliente": "abc"},
+        {"tipo_offerta": "02"},
         {"tipo_offerta": 1},
         {"regione": "  "},
         {"regione": 5},
