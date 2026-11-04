@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Regole permanenti per gli agenti che lavorano su questo repository. Contesto completo in `docs/architettura.md`; cosa fare adesso in `PROMPT.md`.
+Regole permanenti per gli agenti che lavorano su questo repository. Contesto completo in `docs/architettura.md`; obiettivi da implementare in `docs/goals.md`; task operativi di un obiettivo in `docs/task.md`.
 
 ## Il progetto in due righe
 

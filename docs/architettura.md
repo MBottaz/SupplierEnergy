@@ -1,6 +1,6 @@
 # Architettura: database offerte luce e interfacce per agenti
 
-Documento di contesto, stabile nel tempo. Va in `docs/architettura.md`. Cosa sviluppare e in che ordine è in `PROMPT.md`.
+Documento di contesto, stabile nel tempo. Va in `docs/architettura.md`. Gli obiettivi non ancora implementati sono in `docs/goals.md`; i task operativi in `docs/task.md`.
 
 ## 1. Obiettivo
 

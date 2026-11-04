@@ -1,4 +1,10 @@
-# Task di implementazione: server MCP minimale per la ricerca delle offerte
+# Task: server MCP minimale per la ricerca delle offerte
+
+Task operativi per completare un obiettivo. Questo file copre l'obiettivo
+"server MCP minimale per la ricerca delle offerte", **completato**: descrive i
+passi che hanno portato al codice esistente. Gli obiettivi non ancora
+implementati, in ordine, sono in `docs/goals.md`; quando se ne avvia uno, i suoi
+task si scrivono qui. Il design del sistema è in `docs/architettura.md`.
 
 ## 1. Obiettivo della prima iterazione
 

@@ -23,7 +23,7 @@ The XML parser is streaming and hardened against DTD/external entities. Unknown 
 | `etl/pun.py` | Monthly PUN from the Portale Offerte "Prezzi storici" CSV (`PUN_MENSILE` series); it accumulates across database rebuilds. |
 | `offerte/` | Single non-ETL package: read-only query and calculation library, with the CLI, MCP server, and API-key management as submodules (`offerte.cli`, `offerte.mcp`, `offerte.auth`). `offerte.db` is the only read-only database entry point (`mode=ro` plus `PRAGMA query_only=ON`); `offerte.ricerca.cerca_offerte` is the shared application search function; `offerte.mcp` is the MCP server exposing it as the `cerca_offerte` tool with structured errors; transport stdio (default) or local streamable HTTP bound to loopback. |
 | `tests/` | Unit and integration tests, including XML security, ETL swap cases, MCP tool discovery, and an MCP stdio integration test with the official client. |
-| `docs/` | Architecture, the `cerca_offerte` contract, XML validation, open questions, and the tracked parameter fixture. |
+| `docs/` | Architecture, the `cerca_offerte` contract, XML validation, open questions, the goals still to implement (`goals.md`), the task breakdown for a goal (`task.md`), and the tracked parameter fixture. |
 | `build/` | Local generated database files; ignored by Git. |
 | `raw/` | Local dated XML downloads; ignored by Git. |
 
@@ -153,4 +153,4 @@ local use only: do not expose it beyond loopback.
 
 The implemented scope is the ETL (offers, parameters, and the monthly PUN series), its validation on the fixture and real XML summary, the read-only database access layer, the shared `cerca_offerte` search function (filters, limits, stable ordering, structured errors), and the MCP server (`mcp==2.3.0`, official Python SDK v2 line) on stdio or local loopback HTTP, exposing `cerca_offerte` with structured errors while keeping the database read-only. The CLI, cost calculation, authentication, and deployment units are planned work, not runnable features yet; the daily PUN series (GME) is out of scope for now.
 
-Read `docs/architettura.md` for the design and data model, `docs/contratto_cerca_offerte.md` for the `cerca_offerte` contract, `PROMPT.md` for the planned phases, `docs/validazione_xml.md` for the aggregate validation of the real XML, and `docs/questioni_aperte.md` for unresolved source and calculation questions.
+Read `docs/architettura.md` for the design and data model, `docs/contratto_cerca_offerte.md` for the `cerca_offerte` contract, `docs/validazione_xml.md` for the aggregate validation of the real XML, `docs/questioni_aperte.md` for unresolved source and calculation questions, `docs/goals.md` for the goals still to implement, and `docs/task.md` for the task breakdown of a goal.

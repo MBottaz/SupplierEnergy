@@ -1,7 +1,7 @@
 # Validazione dell'XML reale
 
 Riassunto (solo aggregati, nessun dato grezzo) del primo caricamento dell'XML
-open data completo, come richiesto da `PROMPT.md` fase 2.
+open data completo (obiettivo ETL, completato).
 
 ## Come è stato prodotto
 
