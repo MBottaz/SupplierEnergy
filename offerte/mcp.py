@@ -6,14 +6,14 @@ Qui si traduce solo l'ingresso/uscita del protocollo MCP e l'errore strutturato.
 
 L'SDK ufficiale (`mcp==2.3.0`) è l'unica dipendenza oltre alla libreria: nessun
 framework web aggiuntivo. Il trasporto di default è stdio; quello HTTP
-streamable, quando richiesto, ascolta solo su `127.0.0.1`.
+streamable, quando richiesto, ascolta solo su loopback, salvo consenso esplicito
+al bind non-loopback per il container.
 """
 
 from __future__ import annotations
 
 import argparse
 import json
-import os
 import sys
 from collections.abc import Sequence
 from pathlib import Path
@@ -23,13 +23,11 @@ from mcp.server import MCPServer
 from mcp.types import CallToolResult, TextContent, ToolAnnotations
 from pydantic import BaseModel, ConfigDict, Field
 
-from offerte.db import NOME_DB_DEFAULT, apri_db
-from offerte.errori import ErroreOfferte
+from offerte import config
+from offerte.db import apri_db
+from offerte.errori import DatabaseNonDisponibile, ErroreOfferte
 from offerte.ricerca import OPZIONI_TIPO_CLIENTE, OPZIONI_TIPO_OFFERTA
 from offerte.ricerca import cerca_offerte as esegui_ricerca
-
-#: Variabile d'ambiente per il percorso del database, se non si passa `--db`.
-VARIABILE_DB = "OFFERTE_DB"
 
 #: Host ammessi per il trasporto HTTP: solo loopback. `0.0.0.0`, `::` e
 #: qualunque interfaccia pubblica sono rifiutati prima di aprire la porta.
@@ -110,8 +108,8 @@ class Filtri(BaseModel):
 
 
 def percorso_db_da_ambiente() -> Path:
-    """Percorso del database: `--db`, poi `OFFERTE_DB`, poi `build/offerte.db`."""
-    return Path(os.environ.get(VARIABILE_DB, NOME_DB_DEFAULT))
+    """Percorso del database da `OFFERTE_DB` o dal default runtime."""
+    return config.percorso_db_da_ambiente()
 
 
 def _risultato_errore(errore: ErroreOfferte) -> CallToolResult:
@@ -158,14 +156,55 @@ def crea_server(percorso_db: str | Path | None = None) -> MCPServer:
     return server
 
 
-def valida_host(host: str) -> str:
-    """Accetta solo interfacce di loopback; solleva `ValueError` altrimenti."""
-    if host not in HOST_AMMESSI:
-        raise ValueError(
-            f"host non ammesso: il trasporto HTTP ascolta solo su loopback "
-            f"({' o '.join(sorted(HOST_AMMESSI))}), non su {host!r}"
-        )
-    return host
+def valida_host(host: str, *, consenti_non_loopback: bool = False) -> str:
+    """Accetta il loopback; le altre interfacce solo con consenso esplicito.
+
+    L'apertura non-loopback non è mai implicita: richiede il flag
+    `--consenti-bind-non-loopback` o la variabile d'ambiente corrispondente,
+    usati dal container che ascolta su `0.0.0.0` mentre la porta viene
+    pubblicata solo sul loopback dell'host.
+    """
+    if host in HOST_AMMESSI or consenti_non_loopback:
+        return host
+    raise ValueError(
+        f"host non ammesso: il trasporto HTTP ascolta solo su loopback "
+        f"({' o '.join(sorted(HOST_AMMESSI))}), non su {host!r}; "
+        "per aprirlo servono --consenti-bind-non-loopback o "
+        "$OFFERTE_MCP_CONSENTI_NON_LOOPBACK"
+    )
+
+
+def verifica_avvio(percorso_db: str | Path) -> tuple[int, dict[str, str]]:
+    """Stato di readiness: 0 leggibile, 1 assente, 2 non leggibile.
+
+    Non crea né modifica il database: serve al controllo di salute del
+    container e distingue i tre casi con un esito strutturato.
+    """
+    database = Path(percorso_db)
+    try:
+        esiste = database.is_file()
+    except OSError:
+        return 2, {
+            "stato": "database_non_leggibile",
+            "messaggio": "il database non è leggibile in sola lettura",
+        }
+    if not esiste:
+        return 1, {
+            "stato": "database_assente",
+            "messaggio": "il database configurato non esiste",
+        }
+    try:
+        with apri_db(database):
+            pass
+    except DatabaseNonDisponibile:
+        return 2, {
+            "stato": "database_non_leggibile",
+            "messaggio": "il database non è leggibile in sola lettura",
+        }
+    return 0, {
+        "stato": "pronto",
+        "messaggio": "database leggibile in sola lettura",
+    }
 
 
 def _argomenti(argv: Sequence[str] | None) -> argparse.Namespace:
@@ -176,7 +215,7 @@ def _argomenti(argv: Sequence[str] | None) -> argparse.Namespace:
     parser.add_argument(
         "--db",
         default=None,
-        help=f"Percorso del database (default: ${VARIABILE_DB} o {NOME_DB_DEFAULT}).",
+        help=f"Percorso del database (default: ${config.VARIABILE_DB} o {config.NOME_DB_DEFAULT}).",
     )
     parser.add_argument(
         "--trasporto",
@@ -186,14 +225,31 @@ def _argomenti(argv: Sequence[str] | None) -> argparse.Namespace:
     )
     parser.add_argument(
         "--host",
-        default="127.0.0.1",
-        help="Interfaccia di ascolto HTTP; solo loopback (default: 127.0.0.1).",
+        default=config.host_mcp_da_ambiente(),
+        help=(
+            "Interfaccia di ascolto HTTP; solo loopback "
+            f"(default: ${'OFFERTE_MCP_HOST'} o 127.0.0.1)."
+        ),
     )
     parser.add_argument(
         "--port",
         type=int,
-        default=8000,
-        help="Porta di ascolto HTTP (default: 8000).",
+        default=config.porta_mcp_da_ambiente(),
+        help="Porta di ascolto HTTP (default: $OFFERTE_MCP_PORT o 8000).",
+    )
+    parser.add_argument(
+        "--consenti-bind-non-loopback",
+        action="store_true",
+        default=config.consenti_bind_non_loopback_da_ambiente(),
+        help=(
+            "Consenti un host HTTP non-loopback, per il container che ascolta su "
+            "0.0.0.0 (default: $OFFERTE_MCP_CONSENTI_NON_LOOPBACK)."
+        ),
+    )
+    parser.add_argument(
+        "--verifica",
+        action="store_true",
+        help="Verifica il database ed esce: 0 leggibile, 1 assente, 2 non leggibile.",
     )
     return parser.parse_args(argv)
 
@@ -201,6 +257,13 @@ def _argomenti(argv: Sequence[str] | None) -> argparse.Namespace:
 def main(argv: Sequence[str] | None = None) -> int:
     """Avvia il server. Blocca finché il client è connesso."""
     argomenti = _argomenti(argv)
+
+    if argomenti.verifica:
+        percorso = argomenti.db or percorso_db_da_ambiente()
+        codice, stato = verifica_avvio(percorso)
+        print(json.dumps(stato, ensure_ascii=False, sort_keys=True))
+        return codice
+
     server = crea_server(argomenti.db)
 
     if argomenti.trasporto == "stdio":
@@ -208,7 +271,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 0
 
     try:
-        host = valida_host(argomenti.host)
+        host = valida_host(
+            argomenti.host, consenti_non_loopback=argomenti.consenti_bind_non_loopback
+        )
     except ValueError as errore:
         print(str(errore), file=sys.stderr)
         return 2

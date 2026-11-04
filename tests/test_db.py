@@ -68,6 +68,22 @@ def test_percorso_directory(tmp_path: Path) -> None:
         pass
 
 
+def test_errore_di_permessi_diventa_strutturato(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    vero = Path.is_file
+
+    def finto(self: Path) -> bool:
+        if self.name == "vietato.db":
+            raise PermissionError(13, "negato")
+        return vero(self)
+
+    monkeypatch.setattr(Path, "is_file", finto)
+
+    with pytest.raises(DatabaseNonDisponibile), apri_db(tmp_path / "vietato.db"):
+        pass
+
+
 def test_file_non_database(tmp_path: Path) -> None:
     finto = tmp_path / "finto.db"
     finto.write_text("non sono un database sqlite", encoding="utf-8")

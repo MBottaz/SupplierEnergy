@@ -147,6 +147,87 @@ Fuori scope finché l'utente non lo chiede: **OAuth** per i client che accettano
 
 ## 12. Rete e deployment
 
+### 12.1 Layout runtime e configurazione dei container
+
+Il layout runtime previsto per i volumi è:
+
+```text
+/var/lib/offerte/db/offerte.db
+/var/lib/offerte/db/offerte.db.new
+/var/lib/offerte/db/offerte.db.prev
+/var/lib/offerte/raw/YYYY-MM-DD/
+/var/lib/offerte/db/etl.lock
+```
+
+`offerte.db`, `.new` e `.prev` restano nella stessa directory e sullo stesso
+volume: l'ETL completa le validazioni e poi usa il rename atomico già previsto.
+Database e raw sono directory separate. Il servizio ETL monta entrambe in
+lettura/scrittura; il servizio MCP monta solo il database in sola lettura e non
+monta i raw.
+
+I percorsi e il bind HTTP sono configurabili senza modificare il codice. I
+valori di una specifica opzione CLI prevalgono sull'ambiente:
+
+| Variabile | Default | Significato |
+|---|---|---|
+| `OFFERTE_DB` | `/var/lib/offerte/db/offerte.db` | database attivo |
+| `OFFERTE_RAW_DIR` | `/var/lib/offerte/raw` | radice dei raw datati |
+| `OFFERTE_PARAMETRI` | non impostata | CSV dei parametri fornito al job ETL |
+| `OFFERTE_MCP_HOST` | `127.0.0.1` | interfaccia HTTP MCP, solo loopback in questa fase |
+| `OFFERTE_MCP_PORT` | `8000` | porta HTTP MCP |
+| `OFFERTE_MCP_CONSENTI_NON_LOOPBACK` | non impostata | apertura esplicita del bind non-loopback (container) |
+
+L'utente `offerte-etl` è proprietario della directory del database e dei raw;
+`offerte-mcp` appartiene al gruppo condiviso di lettura del database. La
+protezione effettiva del mount read-only di MCP è responsabilità della
+configurazione Docker/systemd, oltre a `mode=ro` e `PRAGMA query_only=ON` nel
+codice.
+
+### 12.2 Immagine Docker
+
+`Dockerfile` costruisce una sola immagine multi-stage: la fase di build crea
+l'ambiente Python con `uv.lock` (`--locked --no-dev`), mentre la fase runtime
+contiene solo l'ambiente virtuale, i pacchetti `etl` e `offerte` e le directory
+runtime. L'immagine usa basi Python e uv fissate per digest, non include test,
+raw, database locali o strumenti di sviluppo, e parte come utente non-root
+`offerte-mcp`.
+
+L'entrypoint è `python` con default `-m offerte.mcp`; il job batch seleziona lo
+stesso artefatto con `-m etl scarica` e la configurazione Docker seleziona
+`offerte-etl` senza duplicare l'immagine. La limitazione del filesystem a sola
+lettura, `no-new-privileges`, il drop delle capability e il `tmpfs` per `/tmp`
+sono applicati dai servizi Docker, non implicitamente dal processo applicativo.
+
+### 12.3 Servizi Docker Compose
+
+`compose.yml` avvia i due processi dalla stessa immagine:
+
+- `offerte-mcp` (long-running, utente `offerte-mcp`) monta il database in sola
+  lettura e non monta i raw; pubblica la porta solo su
+  `127.0.0.1:${OFFERTE_MCP_PORT:-8000}:8000`; ha filesystem di sola lettura,
+  `tmpfs` per `/tmp`, `no-new-privileges` e nessuna capability; usa
+  `restart: unless-stopped`. Nel container ascolta su `0.0.0.0`, perché solo così
+  la porta pubblicata raggiunge il processo: l'apertura non-loopback è resa
+  esplicita da `OFFERTE_MCP_CONSENTI_NON_LOOPBACK`, mai implicita. Un healthcheck
+  esegue `python -m offerte.mcp --verifica`.
+- `offerte-etl` (batch, utente `offerte-etl`, profilo `etl`) monta database e raw
+  in lettura/scrittura, usa `restart: "no"` e termina al termine dell'ETL. Non
+  parte con `docker compose up` e non è avviato da MCP.
+
+### 12.4 Lock ETL e readiness
+
+Due ETL sovrapposti non devono mai leggere e sostituire lo stesso database. Il
+lock è un file `etl.lock` nella directory del database (`flock` esclusivo non
+bloccante), acquisito prima della lettura e dello swap: vive sullo stesso volume
+persistente, è condiviso fra container e viene rilasciato anche in caso di
+errore o terminazione. Se è già tenuto, l'ETL esce con codice 3 e un errore
+strutturato `etl_in_corso`, senza toccare il database.
+
+La readiness del processo MCP è `python -m offerte.mcp --verifica`: esce 0 se il
+database è leggibile in sola lettura, 1 se manca, 2 se non è leggibile. Non crea
+mai un database vuoto: un volume non inizializzato resta un errore controllato,
+non un database silenziosamente vuoto.
+
 - Una VM Linux (Debian stabile) in un provider UE scelto dall'utente. Aggiornamenti di sicurezza automatici, SSH con chiave.
 - **Cloudflare davanti come proxy**: DDoS, WAF, rate limit grossolano. L'origine non deve essere raggiungibile direttamente (altrimenti la protezione si aggira). **Solo Cloudflare Tunnel** (`cloudflared`): la VM apre solo connessioni in uscita, nessuna porta pubblica, il server MCP ascolta su `127.0.0.1` in HTTP semplice. Niente reverse proxy locale (Caddy) e nessuna 443 pubblica: un'alternativa senza Tunnel si valuterà solo se un giorno si lascia Cloudflare.
   - Nota: nelle chiamate MCP (POST JSON-RPC dinamiche) la cache non serve; il valore di Cloudflare è nella mitigazione di DDoS e abusi.

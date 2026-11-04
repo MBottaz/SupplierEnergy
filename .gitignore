@@ -6,6 +6,9 @@ __pycache__/
 .mypy_cache/
 .ruff_cache/
 
+# Configurazione locale / segreti (nessun segreto in questa fase)
+.env
+
 # Artefatti locali
 build/
 raw/

@@ -18,9 +18,6 @@ from urllib.parse import quote
 
 from offerte.errori import DatabaseNonDisponibile
 
-#: Percorso di default del database, coerente con le ricette `just` dell'ETL.
-NOME_DB_DEFAULT = "build/offerte.db"
-
 _MESSAGGIO_NON_DISPONIBILE = "il database delle offerte non è disponibile in sola lettura"
 
 
@@ -38,7 +35,12 @@ def apri_db(percorso: str | Path) -> Iterator[sqlite3.Connection]:
     verifica che il file sia davvero un database.
     """
     file_db = Path(percorso)
-    if not file_db.is_file():
+    try:
+        esiste = file_db.is_file()
+    except OSError as exc:
+        # Permessi o filesystem non leggibile: stesso errore strutturato.
+        raise DatabaseNonDisponibile(_MESSAGGIO_NON_DISPONIBILE) from exc
+    if not esiste:
         raise DatabaseNonDisponibile(_MESSAGGIO_NON_DISPONIBILE)
 
     try:

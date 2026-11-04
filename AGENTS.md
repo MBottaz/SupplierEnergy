@@ -38,5 +38,9 @@ Mantieni questa sezione aggiornata man mano che esistono:
 - `just etl-scarica` — scarica l'XML open data del giorno e carica il DB (rete).
 - `just etl-pun` — scarica il CSV "Prezzi storici" e aggiorna il PUN mensile (rete).
 - `just etl-pun-file PERCORSO` — carica il PUN mensile da un CSV già scaricato.
-- `just test` — include i test MCP (scoperta del tool, chiamate in-memory, integrazione stdio, HTTP locale).
-- `uv run python -m offerte.mcp --db build/offerte.db` — server MCP in sola lettura su stdio; con `--trasporto http` ascolta solo su loopback (`127.0.0.1`).
+- `just test` — include i test MCP (scoperta del tool, chiamate in-memory, integrazione stdio, HTTP locale), la readiness, il lock ETL e i controlli statici di Compose.
+- `uv run python -m offerte.mcp --db build/offerte.db` — server MCP in sola lettura su stdio; con `--trasporto http` ascolta solo su loopback (`127.0.0.1`), salvo consenso esplicito al bind non-loopback per i container.
+- `uv run python -m offerte.mcp --verifica --db build/offerte.db` — readiness: 0 database leggibile, 1 assente, 2 non leggibile; non crea il database.
+- `docker compose build` e `docker compose up -d offerte-mcp` — costruisce l'immagine e avvia MCP pubblicando la porta solo su `127.0.0.1`.
+- `docker compose --profile etl run --rm offerte-etl` — esegue il job ETL (lock esclusivo, swap atomico, esce al termine).
+- `docker compose -f compose.yml -f deploy/compose.local.yml ...` — variante con la fixture locale in `build/`, senza volumi nominati né rete.

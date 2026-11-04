@@ -10,7 +10,7 @@ XML/CSV files ──> download ──> streaming parser ──> SQLite database
                          validation + atomic database swap
 ```
 
-The ETL builds `offerte.db.new`, validates it, and replaces the active database only when the checks pass. The previous database is kept as `offerte.db.prev`. The PUN-only update uses the same swap: it copies the active database, updates `pun`, and replaces it only if the copy passes the integrity check. Raw downloads are stored by date under `raw/`.
+The ETL builds `offerte.db.new`, validates it, and replaces the active database only when the checks pass. The previous database is kept as `offerte.db.prev` in the same directory. The PUN-only update uses the same swap: it copies the active database, updates `pun`, and replaces it only if the copy passes the integrity check. Raw downloads are stored by date under the configured raw directory.
 
 The XML parser is streaming and hardened against DTD/external entities. Unknown XML paths are preserved in `extra_json` and reported instead of stopping the load. Prices are parsed with `Decimal` and stored in SQLite as `REAL`.
 
@@ -24,6 +24,8 @@ The XML parser is streaming and hardened against DTD/external entities. Unknown 
 | `offerte/` | Single non-ETL package: read-only query and calculation library, with the CLI, MCP server, and API-key management as submodules (`offerte.cli`, `offerte.mcp`, `offerte.auth`). `offerte.db` is the only read-only database entry point (`mode=ro` plus `PRAGMA query_only=ON`); `offerte.ricerca.cerca_offerte` is the shared application search function; `offerte.mcp` is the MCP server exposing it as the `cerca_offerte` tool with structured errors; transport stdio (default) or local streamable HTTP bound to loopback. |
 | `tests/` | Unit and integration tests, including XML security, ETL swap cases, MCP tool discovery, and an MCP stdio integration test with the official client. |
 | `docs/` | Architecture, the `cerca_offerte` contract, XML validation, open questions, the goals still to implement (`goals.md`), the task breakdown for a goal (`task.md`), and the tracked parameter fixture. |
+| `compose.yml` | Docker Compose services `offerte-mcp` and `offerte-etl`, from the single image. |
+| `deploy/` | Deployment notes and `compose.local.yml`, the fixture override without named volumes or network. |
 | `build/` | Local generated database files; ignored by Git. |
 | `raw/` | Local dated XML downloads; ignored by Git. |
 
@@ -80,6 +82,38 @@ just etl-pun-file path/to/prezzi.csv  # loads a file already downloaded
 
 The network command still takes the parameter CSV from `docs/`; check `justfile` before using it with a different snapshot.
 
+### Runtime paths and environment
+
+The runtime defaults are suitable for the deployment volume:
+
+| Variable | Default | Used for |
+| --- | --- | --- |
+| `OFFERTE_DB` | `/var/lib/offerte/db/offerte.db` | active SQLite database (with `.new` and `.prev` beside it) |
+| `OFFERTE_RAW_DIR` | `/var/lib/offerte/raw` | dated raw downloads |
+| `OFFERTE_PARAMETRI` | unset | parameter CSV, until its automatic download is available |
+| `OFFERTE_MCP_HOST` | `127.0.0.1` | MCP HTTP bind address (loopback only in this phase) |
+| `OFFERTE_MCP_PORT` | `8000` | MCP HTTP port |
+| `OFFERTE_MCP_CONSENTI_NON_LOOPBACK` | unset | explicit opt-in to a non-loopback HTTP bind (containers only) |
+
+An explicit command-line option takes precedence over its environment variable.
+`--db` remains supported by the MCP server and by the ETL. The MCP process
+opens the active database with SQLite `mode=ro` and `PRAGMA query_only=ON`; it
+never creates a missing database and has no access to the raw directory. The
+ETL creates and swaps `offerte.db.new` and `offerte.db.prev` in the same
+configured database directory. Keep that directory on one writable volume for
+the ETL and a read-only mount for MCP; the raw directory is a separate ETL-only
+mount.
+
+For example, a local run can use paths outside the defaults without changing
+code:
+
+```bash
+OFFERTE_DB=/tmp/offerte/db/offerte.db \
+OFFERTE_RAW_DIR=/tmp/offerte/raw \
+OFFERTE_PARAMETRI=tests/fixtures/PO_Parametri_Mercato_Libero_E_20261014.csv \
+uv run python -m etl locale --raw tests/fixtures/offerta_estratto.xml --snapshot 2026-10-14
+```
+
 The ETL can also be run directly:
 
 ```bash
@@ -101,13 +135,112 @@ uv run python -m etl pun \
 
 Commands print structured JSON. A failed validation leaves the active database unchanged and returns a non-zero exit code.
 
+## Docker image (phase 2)
+
+The repository includes one multi-stage image for both application processes.
+The build uses the pinned `uv.lock`, installs production dependencies only, and
+copies only `etl/` and `offerte/` into the runtime stage; tests, raw files,
+local databases, and development tools are excluded by `.dockerignore`.
+Python 3.11 and uv base images are pinned by digest. The image contains the
+non-root users `offerte-etl` and `offerte-mcp`, with the latter as the default.
+
+Build it from the repository root:
+
+```bash
+docker build --tag offerte:local .
+```
+
+The default command is the MCP module. The same image selects the ETL module by
+replacing the command and, for a batch run, the user:
+
+```bash
+docker run --rm \
+  --read-only --tmpfs /tmp \
+  --security-opt no-new-privileges --cap-drop ALL \
+  --user offerte-mcp \
+  -e OFFERTE_DB=/var/lib/offerte/db/offerte.db \
+  -v "$PWD/build:/var/lib/offerte/db:ro" \
+  offerte:local -m offerte.mcp
+
+docker run --rm --user offerte-etl \
+  --security-opt no-new-privileges --cap-drop ALL \
+  -v offerte-db:/var/lib/offerte/db \
+  -v offerte-raw:/var/lib/offerte/raw \
+  -v "$PWD/docs:/var/lib/offerte/parametri:ro" \
+  offerte:local -m etl scarica \
+  --db /var/lib/offerte/db/offerte.db \
+  --raw-dir /var/lib/offerte/raw \
+  --parametri /var/lib/offerte/parametri/PO_Parametri_Mercato_Libero_E_20261014.csv
+```
+
+This section covers the image only; the Compose services built from it are
+described below. The MCP container must keep its database mount read-only and
+must not be given a raw mount.
+
+## Docker Compose (phase 3)
+
+`compose.yml` runs both processes from that image:
+
+- `offerte-mcp` is long-running, runs as the non-root `offerte-mcp` user, mounts
+the database read-only, has a read-only root filesystem with a `tmpfs` for
+`/tmp`, drops all capabilities, and publishes the MCP port only on the host
+loopback (`127.0.0.1:${OFFERTE_MCP_PORT:-8000}:8000`). It does not mount the raw
+directory. A healthcheck runs `python -m offerte.mcp --verifica`, which reports
+`database_assente` (exit 1) or `database_non_leggibile` (exit 2) instead of
+creating an empty database.
+- `offerte-etl` is a batch job under the `etl` profile, runs as `offerte-etl`,
+mounts the database and the dated raw directory read-write, and exits when the
+ETL finishes (success or failure). It is never started by `docker compose up`.
+
+The database volume holds `offerte.db`, its `.new` and `.prev` snapshots, and
+the `etl.lock` file. The lock (`flock`, released on error or termination) makes
+a second concurrent ETL fail immediately with exit code 3 and a structured
+`etl_in_corso` error. The parameter CSV is mounted (not baked into the image)
+until its automatic download exists; its filename must keep the
+`PO_Parametri_..._AAAAMMGG.csv` form because the date is read from it.
+
+Copy `.env.example` to `.env` to override the port and the parameter CSV
+location, then build and start MCP (the database volume must already contain a
+database produced by the ETL):
+
+```bash
+cp .env.example .env
+docker compose build
+docker compose up -d offerte-mcp
+```
+
+Run the ETL manually:
+
+```bash
+docker compose --profile etl run --rm offerte-etl
+```
+
+For a local fixture without named volumes and without network downloads, use the
+override that bind-mounts `build/`:
+
+```bash
+just etl-fixture
+docker compose -f compose.yml -f deploy/compose.local.yml up --build offerte-mcp
+docker compose -f compose.yml -f deploy/compose.local.yml run --rm offerte-etl
+```
+
+The local override runs as the host UID/GID (set `OFFERTE_LOCAL_UID` and
+`OFFERTE_LOCAL_GID` if yours differ from `1000`) and adds `:z` to the bind mounts
+for SELinux hosts. External scheduling (systemd timer), the operational restore
+procedure, and the repeatable clean-VM smoke test are the next phase, described
+in `docs/task.md`.
+
 ## MCP server (read-only)
 
 The server exposes a single tool, `cerca_offerte`, backed by the same search
 function (`offerte.ricerca.cerca_offerte`) that the future CLI will use. It opens
 the database read-only (`mode=ro` plus `PRAGMA query_only=ON`) and never writes to
 it. The database path comes from `--db`, otherwise from `$OFFERTE_DB`, otherwise
-`build/offerte.db`.
+`/var/lib/offerte/db/offerte.db`. HTTP host and port come from `--host` and
+`--port`, then `$OFFERTE_MCP_HOST` and `$OFFERTE_MCP_PORT`. Non-loopback hosts
+are refused unless `--consenti-bind-non-loopback` (or
+`$OFFERTE_MCP_CONSENTI_NON_LOOPBACK`) asks for them explicitly, as the Compose
+service does inside the container.
 
 Local stdio (default), for a host that launches the process itself:
 
@@ -146,11 +279,11 @@ just test
 
 Out of scope for now: authentication/API keys, cost calculation, extra tools
 (`confronta_offerte`, `dettaglio_offerta`, `pun`, `decodifica`, `stato_dati`),
-and deployment (Cloudflare Tunnel, systemd). The HTTP transport is meant for
-local use only: do not expose it beyond loopback.
+external scheduling, Cloudflare Tunnel, and systemd units. The HTTP transport is
+meant for local use only: do not expose it beyond loopback.
 
 ## Current scope
 
-The implemented scope is the ETL (offers, parameters, and the monthly PUN series), its validation on the fixture and real XML summary, the read-only database access layer, the shared `cerca_offerte` search function (filters, limits, stable ordering, structured errors), and the MCP server (`mcp==2.3.0`, official Python SDK v2 line) on stdio or local loopback HTTP, exposing `cerca_offerte` with structured errors while keeping the database read-only. The CLI, cost calculation, authentication, and deployment units are planned work, not runnable features yet; the daily PUN series (GME) is out of scope for now.
+The implemented scope is the ETL (offers, parameters, and the monthly PUN series), its validation on the fixture and real XML summary, the read-only database access layer, the shared `cerca_offerte` search function (filters, limits, stable ordering, structured errors), the MCP server (`mcp==2.3.0`, official Python SDK v2 line) on stdio or local loopback HTTP, a reproducible non-root Docker image for MCP and ETL, and the Compose services `offerte-mcp` and `offerte-etl` (read-only MCP on host loopback, batch ETL with an exclusive lock and atomic swap). The CLI, cost calculation, authentication, external scheduling, and deployment units are planned work; the daily PUN series (GME) is out of scope for now.
 
 Read `docs/architettura.md` for the design and data model, `docs/contratto_cerca_offerte.md` for the `cerca_offerte` contract, `docs/validazione_xml.md` for the aggregate validation of the real XML, `docs/questioni_aperte.md` for unresolved source and calculation questions, `docs/goals.md` for the goals still to implement, and `docs/task.md` for the task breakdown of a goal.

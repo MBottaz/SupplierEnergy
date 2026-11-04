@@ -1,0 +1,69 @@
+# Deployment Compose: due servizi applicativi dalla stessa immagine.
+#
+# - `offerte-mcp` resta attivo, in sola lettura, e pubblica la porta MCP solo
+#   sul loopback dell'host.
+# - `offerte-etl` è batch (profilo `etl`): parte, aggiorna il database con swap
+#   atomico, termina. Non viene avviato da `docker compose up`.
+#
+# Il volume del database deve contenere un DB caricato dall'ETL prima che MCP
+# sia pronto; per la fixture locale vedi `deploy/compose.local.yml` e il README.
+# Questa fase non abilita autenticazione, Cloudflare Tunnel né porte pubbliche.
+
+name: offerte
+
+x-offerte: &offerte
+  build:
+    context: .
+    dockerfile: Dockerfile
+  image: offerte:local
+  read_only: true
+  tmpfs:
+    - /tmp
+  cap_drop:
+    - ALL
+  security_opt:
+    - no-new-privileges:true
+
+services:
+  offerte-mcp:
+    <<: *offerte
+    user: offerte-mcp
+    restart: unless-stopped
+    command: ["-m", "offerte.mcp", "--trasporto", "http"]
+    environment:
+      OFFERTE_DB: /var/lib/offerte/db/offerte.db
+      # Il container ascolta su 0.0.0.0; la porta è pubblicata solo su
+      # 127.0.0.1 dall'host. L'apertura non-loopback è esplicita.
+      OFFERTE_MCP_HOST: 0.0.0.0
+      OFFERTE_MCP_PORT: "8000"
+      OFFERTE_MCP_CONSENTI_NON_LOOPBACK: "1"
+    ports:
+      - "127.0.0.1:${OFFERTE_MCP_PORT:-8000}:8000"
+    volumes:
+      - offerte-db:/var/lib/offerte/db:ro
+    healthcheck:
+      test: ["CMD", "python", "-m", "offerte.mcp", "--verifica"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  offerte-etl:
+    <<: *offerte
+    profiles: ["etl"]
+    user: offerte-etl
+    restart: "no"
+    environment:
+      OFFERTE_DB: /var/lib/offerte/db/offerte.db
+      OFFERTE_RAW_DIR: /var/lib/offerte/raw
+      # Il nome del file porta la data di riferimento: va conservato.
+      OFFERTE_PARAMETRI: /var/lib/offerte/parametri/${OFFERTE_PARAMETRI_NOME:-PO_Parametri_Mercato_Libero_E_20261014.csv}
+    volumes:
+      - offerte-db:/var/lib/offerte/db
+      - offerte-raw:/var/lib/offerte/raw
+      - ${OFFERTE_PARAMETRI_DIR:-./docs}:/var/lib/offerte/parametri:ro
+    command: ["-m", "etl", "scarica"]
+
+volumes:
+  offerte-db:
+  offerte-raw:

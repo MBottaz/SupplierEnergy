@@ -32,8 +32,15 @@ from etl.download import (
     scarica,
 )
 from etl.esegui import EsitoEsecuzione, esegui, esegui_pun, ultimo_run
+from etl.lock import ETLInCorso, blocco_etl
 from etl.pun import URL_PUN, nome_file_raw
 from etl.tempo import oggi
+from offerte.config import (
+    NOME_DB_DEFAULT,
+    percorso_db_da_ambiente,
+    percorso_parametri_da_ambiente,
+    percorso_raw_da_ambiente,
+)
 
 #: URL open data indicato dall'utente (Portale Offerte, mercato libero elettrico).
 URL_OFFERTE = (
@@ -57,7 +64,11 @@ ERRORI = {
     "download_fallito": "Download non riuscito.",
     "download_troppo_grande": "Il file scaricato supera il limite di dimensione.",
     "pun_non_valido": "Il file dei prezzi storici non è nel formato atteso.",
+    "etl_in_corso": "Un'altra esecuzione ETL è già in corso.",
 }
+
+#: Codice di uscita quando un'altra esecuzione tiene il lock ETL.
+EXIT_LOCK = 3
 
 
 def url_offerte(giorno: str) -> str:
@@ -87,16 +98,40 @@ def main(
         default=None,
         help=f"default: URL open data del giorno; host ammessi: {', '.join(sorted(HOST_AMMESSI))}",
     )
-    rete.add_argument("--raw-dir", default="raw", help="cartella dei raw datati (default: raw)")
+    rete.add_argument(
+        "--raw-dir",
+        default=str(percorso_raw_da_ambiente()),
+        help="cartella dei raw datati (default: $OFFERTE_RAW_DIR o runtime).",
+    )
 
     pun = comandi.add_parser("pun", help="aggiorna il PUN mensile nel DB (storico)")
-    pun.add_argument("--db", required=True, help="percorso del database SQLite")
-    pun.add_argument("--raw-dir", default="raw", help="cartella dei raw datati (default: raw)")
+    pun.add_argument(
+        "--db",
+        default=str(percorso_db_da_ambiente()),
+        help=f"percorso del database SQLite (default: $OFFERTE_DB o {NOME_DB_DEFAULT})",
+    )
+    pun.add_argument(
+        "--raw-dir",
+        default=str(percorso_raw_da_ambiente()),
+        help="cartella dei raw datati (default: $OFFERTE_RAW_DIR o runtime).",
+    )
     sorgente = pun.add_mutually_exclusive_group()
     sorgente.add_argument("--file", default=None, help="CSV dei prezzi storici già scaricato")
     sorgente.add_argument("--url", default=None, help=f"default: {URL_PUN}")
 
     opzioni = parser.parse_args(argomenti)
+    try:
+        with blocco_etl(opzioni.db):
+            return _esegui_comando(opzioni, apri=apri)
+    except ETLInCorso as errore:
+        return _errore("etl_in_corso", note=[str(errore)], codice_uscita=EXIT_LOCK)
+
+
+def _esegui_comando(
+    opzioni: argparse.Namespace,
+    *,
+    apri: Callable[..., AbstractContextManager[Any]] | None,
+) -> int:
     if opzioni.comando == "pun":
         return _pun(opzioni, apri=apri)
     snapshot = opzioni.snapshot or oggi()
@@ -106,8 +141,17 @@ def main(
 
 
 def _argomenti_comuni(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("--db", required=True, help="percorso del database SQLite")
-    parser.add_argument("--parametri", default=None, help="CSV dei parametri regolati")
+    parser.add_argument(
+        "--db",
+        default=str(percorso_db_da_ambiente()),
+        help=f"percorso del database SQLite (default: $OFFERTE_DB o {NOME_DB_DEFAULT})",
+    )
+    parametri = percorso_parametri_da_ambiente()
+    parser.add_argument(
+        "--parametri",
+        default=str(parametri) if parametri is not None else None,
+        help="CSV dei parametri regolati (default: $OFFERTE_PARAMETRI, se impostato)",
+    )
     parser.add_argument(
         "--snapshot",
         default=None,
@@ -266,13 +310,13 @@ def _stampa_esecuzione(
     return 0
 
 
-def _errore(codice: str, note: Sequence[str] = ()) -> int:
+def _errore(codice: str, note: Sequence[str] = (), *, codice_uscita: int = 1) -> int:
     messaggio = ERRORI.get(codice, ERRORI["errore_interno"])
     contenuto: dict[str, object] = {"esito": "errore", "codice": codice, "messaggio": messaggio}
     if note:
         contenuto["note"] = list(note)
     _stampa(contenuto, su_errore=True)
-    return 1
+    return codice_uscita
 
 
 def _stampa(contenuto: dict[str, object], *, su_errore: bool = False) -> None:

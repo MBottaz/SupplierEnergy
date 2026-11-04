@@ -1,0 +1,32 @@
+# Override per lo sviluppo locale, senza volumi nominati e senza rete.
+#
+#   just etl-fixture
+#   docker compose -f compose.yml -f deploy/compose.local.yml up --build offerte-mcp
+#   docker compose -f compose.yml -f deploy/compose.local.yml run --rm offerte-etl
+#
+# MCP legge la fixture in `build/`; il job ETL ricarica la fixture XML/CSV del
+# repository, quindi non scarica nulla.
+
+services:
+  offerte-mcp:
+    # La fixture in `build/` è del proprietario host: qui il container gira con
+    # lo stesso UID/GID, altrimenti l'ETL non potrebbe scrivere il lock.
+    user: "${OFFERTE_LOCAL_UID:-1000}:${OFFERTE_LOCAL_GID:-1000}"
+    volumes:
+      # `:z` rilabella il bind mount per SELinux (inerte dove non è attivo).
+      - ./build:/var/lib/offerte/db:ro,z
+
+  offerte-etl:
+    user: "${OFFERTE_LOCAL_UID:-1000}:${OFFERTE_LOCAL_GID:-1000}"
+    volumes:
+      - ./build:/var/lib/offerte/db:z
+      - ./tests/fixtures/offerta_estratto.xml:/var/lib/offerte/offerta.xml:ro,z
+      - ./tests/fixtures/PO_Parametri_Mercato_Libero_E_20261014.csv:/var/lib/offerte/parametri/PO_Parametri_Mercato_Libero_E_20261014.csv:ro,z
+    command:
+      - "-m"
+      - "etl"
+      - "locale"
+      - "--raw"
+      - "/var/lib/offerte/offerta.xml"
+      - "--snapshot"
+      - "2026-10-14"

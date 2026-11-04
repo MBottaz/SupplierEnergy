@@ -15,8 +15,9 @@ le regole di lavoro in `AGENTS.md`.
 ## Cosa resta da fare
 
 - `goals.md` — obiettivi non ancora implementati, in ordine.
-- `task.md` — task operativi per completare un obiettivo (ora: il server MCP
-  minimale di ricerca, completato).
+- `task.md` — task operativi per completare un obiettivo (ora: scheduling
+  esterno e documentazione operativa del deployment Docker; l'immagine e i
+  servizi Compose sono già completati).
 
 ## Dati di riferimento
 
