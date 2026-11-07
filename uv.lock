@@ -1,11 +1,11 @@
 version = 1
-revision = 3
+revision = 5
 requires-python = ">=3.11"
 resolution-markers = [
     "python_full_version >= '3.15'",
     "python_full_version == '3.14.*'",
     "python_full_version >= '3.12' and python_full_version < '3.14' and sys_platform == 'emscripten'",
-    "(python_full_version < '3.14' and sys_platform != 'emscripten') or (python_full_version < '3.12' and sys_platform == 'emscripten')",
+    "python_full_version < '3.12' or (python_full_version >= '3.12' and python_full_version < '3.14' and sys_platform != 'emscripten')",
 ]
 
 [[package]]
@@ -621,6 +621,7 @@ dependencies = [
     { name = "defusedxml" },
     { name = "mcp" },
     { name = "pydantic" },
+    { name = "starlette" },
 ]
 
 [package.dev-dependencies]
@@ -635,6 +636,7 @@ requires-dist = [
     { name = "defusedxml", specifier = "==0.7.1" },
     { name = "mcp", specifier = "==2.3.0" },
     { name = "pydantic", specifier = "==2.14.1" },
+    { name = "starlette", specifier = "==1.10.0" },
 ]
 
 [package.metadata.requires-dev]

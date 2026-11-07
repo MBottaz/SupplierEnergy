@@ -40,6 +40,15 @@ def test_etl_usa_i_percorsi_runtime_dall_ambiente(
     assert not (tmp_path / "db" / "attivo.db.new").exists()
 
 
+def test_porta_piattaforma_e_override_specifico(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("OFFERTE_MCP_PORT", raising=False)
+    monkeypatch.setenv("PORT", "3123")
+    assert _argomenti([]).port == 3123
+
+    monkeypatch.setenv("OFFERTE_MCP_PORT", "8123")
+    assert _argomenti([]).port == 8123
+
+
 def test_ambiente_configura_raw_parametri_e_http(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("OFFERTE_DB", "/srv/offerte/db/attivo.db")
     monkeypatch.setenv("OFFERTE_RAW_DIR", "/srv/offerte/raw")

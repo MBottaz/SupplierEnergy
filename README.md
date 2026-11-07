@@ -14,6 +14,29 @@ The ETL builds `offerte.db.new`, validates it, and replaces the active database 
 
 The XML parser is streaming and hardened against DTD/external entities. Unknown XML paths are preserved in `extra_json` and reported instead of stopping the load. Prices are parsed with `Decimal` and stored in SQLite as `REAL`.
 
+## Deployment decision
+
+The first production deployment will use one Debian VPS with Docker Compose:
+`offerte-mcp` is long-running, `offerte-etl` is a one-shot batch job launched by
+an external systemd timer, and `cloudflared` will be the only public ingress.
+The MCP service is intentionally unauthenticated; Cloudflare provides the
+public edge and IP rate limiting. Agents have no shell, filesystem, database, or
+CLI access: MCP is the only agent-facing interface. Kubernetes,
+MySQL/PostgreSQL, Parquet, Redis, and message queues are intentionally deferred.
+
+SQLite remains the canonical serving database. The active database, its
+previous snapshot and the ETL lock are persistent VPS files; the MCP container
+sees only the database read-only. Raw downloads are staging data, not a required
+historical archive, and the production policy will remove them after a successful
+ETL (or after diagnosing a failed run).
+
+The code is kept compatible with a future hosted MCP platform such as
+[Manufact Cloud](https://docs.manufact.com/dashboard/quickstart): application
+functions remain independent of the filesystem and provider, the HTTP entry
+point is configurable, and `/healthz` is a provider-neutral readiness route.
+A future serverless deployment would publish immutable SQLite artifacts to
+shared object storage instead of assuming a persistent local database.
+
 ## Repository layout
 
 | Path | Purpose |
@@ -21,7 +44,7 @@ The XML parser is streaming and hardened against DTD/external entities. Unknown 
 | `etl/` | Download, XML parsing, CSV parameter loading, PUN loading, schema, validation, and atomic swap. Entry point: `python -m etl`. |
 | `etl/schema.sql` | SQLite schema for offers, components, conditions, parameters, decodings, PUN, and ETL runs. |
 | `etl/pun.py` | Monthly PUN from the Portale Offerte "Prezzi storici" CSV (`PUN_MENSILE` series); it accumulates across database rebuilds. |
-| `offerte/` | Single non-ETL package: read-only query and calculation library, with the CLI, MCP server, and API-key management as submodules (`offerte.cli`, `offerte.mcp`, `offerte.auth`). `offerte.db` is the only read-only database entry point (`mode=ro` plus `PRAGMA query_only=ON`); `offerte.ricerca.cerca_offerte` is the shared application search function; `offerte.mcp` is the MCP server exposing it as the `cerca_offerte` tool with structured errors; transport stdio (default) or local streamable HTTP bound to loopback. |
+| `offerte/` | Single non-ETL package: read-only query and calculation library plus the MCP server (`offerte.mcp`). A CLI, if added, is local-only debugging support and is not an agent or production interface. `offerte.db` is the only read-only database entry point (`mode=ro` plus `PRAGMA query_only=ON`); `offerte.ricerca.cerca_offerte` is the shared application search function; `offerte.mcp` exposes it with structured errors; transport stdio (default) or local streamable HTTP bound to loopback. |
 | `tests/` | Unit and integration tests, including XML security, ETL swap cases, MCP tool discovery, and an MCP stdio integration test with the official client. |
 | `docs/` | Architecture, the `cerca_offerte` contract, XML validation, open questions, the goals still to implement (`goals.md`), the task breakdown for a goal (`task.md`), and the tracked parameter fixture. |
 | `compose.yml` | Docker Compose services `offerte-mcp` and `offerte-etl`, from the single image. |
@@ -92,7 +115,8 @@ The runtime defaults are suitable for the deployment volume:
 | `OFFERTE_RAW_DIR` | `/var/lib/offerte/raw` | dated raw downloads |
 | `OFFERTE_PARAMETRI` | unset | parameter CSV, until its automatic download is available |
 | `OFFERTE_MCP_HOST` | `127.0.0.1` | MCP HTTP bind address (loopback only in this phase) |
-| `OFFERTE_MCP_PORT` | `8000` | MCP HTTP port |
+| `OFFERTE_MCP_PORT` | `8000` | MCP HTTP port; takes precedence over `PORT` |
+| `PORT` | unset | fallback port convention for hosted HTTP platforms |
 | `OFFERTE_MCP_CONSENTI_NON_LOOPBACK` | unset | explicit opt-in to a non-loopback HTTP bind (containers only) |
 
 An explicit command-line option takes precedence over its environment variable.
@@ -185,7 +209,8 @@ must not be given a raw mount.
 the database read-only, has a read-only root filesystem with a `tmpfs` for
 `/tmp`, drops all capabilities, and publishes the MCP port only on the host
 loopback (`127.0.0.1:${OFFERTE_MCP_PORT:-8000}:8000`). It does not mount the raw
-directory. A healthcheck runs `python -m offerte.mcp --verifica`, which reports
+directory. `/healthz` is an unauthenticated HTTP readiness route; the Docker
+healthcheck runs `python -m offerte.mcp --verifica`, which reports
 `database_assente` (exit 1) or `database_non_leggibile` (exit 2) instead of
 creating an empty database.
 - `offerte-etl` is a batch job under the `etl` profile, runs as `offerte-etl`,
@@ -230,15 +255,38 @@ for SELinux hosts. External scheduling (systemd timer), the operational restore
 procedure, and the repeatable clean-VM smoke test are the next phase, described
 in `docs/task.md`.
 
+## Future Manufact Cloud deployment
+
+Manufact can deploy this repository from GitHub using the Python runtime or the
+committed `Dockerfile`, with a configurable start command, port, and
+per-environment variables. When this option is evaluated, configure the MCP
+process explicitly as HTTP rather than using its local stdio default:
+
+```text
+start command: python -m offerte.mcp --trasporto http
+port: 3000
+OFFERTE_MCP_HOST=0.0.0.0
+OFFERTE_MCP_PORT=3000
+OFFERTE_MCP_CONSENTI_NON_LOOPBACK=1
+```
+
+Do not configure a production deployment to depend on a local persistent DB or
+raw directory. The future serverless adapter must download a validated,
+immutable SQLite artifact from shared object storage. Preview deployments must
+use separate non-production data and secrets. See `docs/architettura.md` §12.5
+for the boundaries and the official Manufact references.
+
 ## MCP server (read-only)
 
-The server exposes a single tool, `cerca_offerte`, backed by the same search
-function (`offerte.ricerca.cerca_offerte`) that the future CLI will use. It opens
-the database read-only (`mode=ro` plus `PRAGMA query_only=ON`) and never writes to
-it. The database path comes from `--db`, otherwise from `$OFFERTE_DB`, otherwise
+The server exposes a single tool, `cerca_offerte`, backed by the shared search
+function (`offerte.ricerca.cerca_offerte`). MCP is the only interface available
+to agents. A future CLI, if useful for debugging, is local-only and is never
+invoked by MCP or included as a production access path. MCP opens the database
+read-only (`mode=ro` plus `PRAGMA query_only=ON`) and never writes to it. The database path comes from `--db`, otherwise from `$OFFERTE_DB`, otherwise
 `/var/lib/offerte/db/offerte.db`. HTTP host and port come from `--host` and
-`--port`, then `$OFFERTE_MCP_HOST` and `$OFFERTE_MCP_PORT`. Non-loopback hosts
-are refused unless `--consenti-bind-non-loopback` (or
+`--port`, then `$OFFERTE_MCP_HOST` and `$OFFERTE_MCP_PORT` (with `$PORT` as a
+platform fallback). Non-loopback hosts are refused unless
+`--consenti-bind-non-loopback` (or
 `$OFFERTE_MCP_CONSENTI_NON_LOOPBACK`) asks for them explicitly, as the Compose
 service does inside the container.
 
@@ -277,13 +325,15 @@ run as part of:
 just test
 ```
 
-Out of scope for now: authentication/API keys, cost calculation, extra tools
+Out of scope for now: cost calculation, extra tools
 (`confronta_offerte`, `dettaglio_offerta`, `pun`, `decodifica`, `stato_dati`),
-external scheduling, Cloudflare Tunnel, and systemd units. The HTTP transport is
-meant for local use only: do not expose it beyond loopback.
+external scheduling, systemd units, and production hardening. For the first
+functional trial, the loopback HTTP service may be reached by a temporary
+`cloudflared tunnel --url http://127.0.0.1:8000`; this is an unauthenticated,
+public test endpoint, not a production ingress.
 
 ## Current scope
 
-The implemented scope is the ETL (offers, parameters, and the monthly PUN series), its validation on the fixture and real XML summary, the read-only database access layer, the shared `cerca_offerte` search function (filters, limits, stable ordering, structured errors), the MCP server (`mcp==2.3.0`, official Python SDK v2 line) on stdio or local loopback HTTP, a reproducible non-root Docker image for MCP and ETL, and the Compose services `offerte-mcp` and `offerte-etl` (read-only MCP on host loopback, batch ETL with an exclusive lock and atomic swap). The CLI, cost calculation, authentication, external scheduling, and deployment units are planned work; the daily PUN series (GME) is out of scope for now.
+The implemented scope is the ETL (offers, parameters, and the monthly PUN series), its validation on the fixture and real XML summary, the read-only database access layer, the shared `cerca_offerte` search function (filters, limits, stable ordering, structured errors), the MCP server (`mcp==2.3.0`, official Python SDK v2 line) on stdio or Streamable HTTP, a reproducible non-root Docker image for MCP and ETL, and the Compose services `offerte-mcp` and `offerte-etl` (read-only MCP on host loopback, batch ETL with an exclusive lock and atomic swap). The immediate goal is a functional LLM trial using an already loaded DB and, if needed, a temporary Cloudflare Tunnel. Automatic parameter download, external scheduling, permanent public ingress, IP rate limiting, backup/restore, and production deployment units are later work. Additional MCP tools and cost calculation are post-MVP. A CLI is not an agent interface or deployment requirement; application authentication is intentionally not planned. The daily PUN series (GME) is out of scope for now.
 
 Read `docs/architettura.md` for the design and data model, `docs/contratto_cerca_offerte.md` for the `cerca_offerte` contract, `docs/validazione_xml.md` for the aggregate validation of the real XML, `docs/questioni_aperte.md` for unresolved source and calculation questions, `docs/goals.md` for the goals still to implement, and `docs/task.md` for the task breakdown of a goal.

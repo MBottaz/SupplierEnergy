@@ -8,16 +8,16 @@ Un sistema minimale che:
 
 1. scarica periodicamente le offerte di energia elettrica del mercato libero (XML open data, ~22 MB), il file dei parametri regolati (CSV) e il PUN;
 2. li normalizza e li carica in un database SQLite (un solo file);
-3. li espone in sola lettura ad **agenti AI** tramite una libreria con due interfacce sottili: una CLI (agenti locali) e un server MCP remoto (agenti remoti), con funzioni come `confronta_offerte`.
+3. li espone in sola lettura ad **agenti AI** tramite il solo server MCP, con funzioni come `confronta_offerte`. La libreria può avere una CLI locale di debug, ma la CLI non è un'interfaccia per agenti e non viene esposta nel deployment.
 
 Gli utilizzatori sono agenti, non persone: nomi, descrizioni e formati di output vanno pensati per un LLM che li legge.
 
 ## 2. Principi
 
 - **Minimalismo**: poche dipendenze, nessun framework pesante, nessun servizio che richieda manutenzione continua.
-- **Portabilità**: Linux (Debian stabile come target), FreeBSD per quanto possibile. Nessuna dipendenza da un cloud specifico: Cloudflare sta davanti, non dentro.
+- **Portabilità**: Linux (Debian stabile come target), FreeBSD per quanto possibile. La prima installazione è su una VM con Docker Compose; il codice non deve dipendere da un provider specifico.
 - **Separazione dei privilegi**: ETL (scrive il DB) e interfacce (lo leggono) sono processi distinti con utenti distinti.
-- **Il DB è ricostruibile** da zero a partire dai file raw datati. Correggere lo schema costa poco.
+- **Il DB è ricostruibile** da zero scaricando di nuovo le fonti. I raw sono staging operativo, non un archivio storico obbligatorio; il DB e lo schema restano portabili come artefatti SQLite.
 - **Non indovinare**: codici del tracciato e formule di calcolo vengono dalla documentazione ufficiale.
 - **Il calcolo del costo sta in Python**, con `Decimal`, testato.
 
@@ -29,26 +29,24 @@ Gli utilizzatori sono agenti, non persone: nomi, descrizioni e formati di output
                                                     offerte.db (aperto in sola lettura)
                                                               │
                               pacchetto `offerte` (nessun I/O di rete nella libreria)
-                               ├── CLI `offerte ... --json`      → agenti locali (via shell)
-                               ├── server MCP su 127.0.0.1       → agenti remoti
-                               └── `authctl` (gestione chiavi)   → non gira come servizio
+                               ├── CLI locale opzionale         → solo debug dell'applicazione
+                               └── server MCP su 127.0.0.1       → unico accesso degli agenti
                                                               │
-        cloudflared (Tunnel: solo connessione in uscita) ←→ Cloudflare (proxy: DDoS, WAF, rate limit) ←→ agenti
+        cloudflared (Tunnel: solo connessione in uscita) ←→ Cloudflare (proxy: DDoS, WAF, rate limit per IP) ←→ agenti
 ```
 
 | Componente | Cosa fa | Cosa NON fa |
 |---|---|---|
 | `etl` | scarica, valida, parsa, scrive il DB nuovo, swap atomico, registra `etl_run` | non serve richieste, non apre porte |
 | libreria `offerte` | query tipizzate e calcolo dei costi (`calc`, funzioni pure) | non accede alla rete |
-| CLI | espone le funzioni della libreria, output JSON | non scrive il DB |
-| server MCP | espone le stesse funzioni come tool, verifica token, rate limit | non scrive il DB, non emette token |
-| `authctl` | crea, elenca, revoca API key | non gira come servizio |
-| Cloudflare + Tunnel | DDoS, WAF, rate limit grossolano, TLS pubblico | non sostituisce l'autenticazione applicativa |
+| CLI locale opzionale | adapter di debug per le funzioni della libreria | non è un'interfaccia per agenti e non fa parte del deployment |
+| server MCP | unico accesso degli agenti, espone le funzioni come tool in sola lettura | non scrive il DB, non gestisce autenticazione o sessioni |
+| Cloudflare + Tunnel | DDoS, WAF, rate limit per IP, TLS pubblico | non modifica il DB e non richiede un reverse proxy locale |
 
-Un solo pacchetto Python non-ETL, `offerte`: la libreria (query e calcolo) più
-i frontend `offerte.cli`, `offerte.mcp` e `offerte.auth`. Sono processi
-separati (e utenti di sistema separati, §12), ma un unico package: la
-separazione dei privilegi è a livello di processo, non di namespace.
+Un solo pacchetto Python non-ETL, `offerte`: la libreria (query e calcolo) e il
+server MCP. Una CLI locale può essere aggiunta come adapter di debug, ma non è
+un frontend per agenti né un componente del deployment. La separazione dei
+privilegi è a livello di processo, non di namespace.
 
 ## 4. Fonti dati (gli URL vanno verificati, non inventati)
 
@@ -99,7 +97,7 @@ Dal file `PO_Parametri_Mercato_Libero_E_20260928.csv` (100 righe):
 ## 8. ETL
 
 1. Download in cartella temporanea con timeout, limite di dimensione (es. 100 MB), solo host in allowlist, solo HTTPS.
-2. Raw salvati in `raw/AAAA-MM-GG/` (ultimi 90 giorni).
+2. Raw salvati temporaneamente in `raw/AAAA-MM-GG/` durante l'ETL. La policy di produzione non richiede conservazione: dopo uno swap riuscito possono essere rimossi; in caso di errore restano solo fino alla diagnosi e poi vengono rimossi. La pulizia automatica è un'attività del deployment, non una responsabilità del server MCP.
 3. Parser XML hardened (entità esterne e rete disabilitate: `defusedxml` oppure `lxml` con `resolve_entities=False, no_network=True`), in streaming con `iterparse`, memoria liberata a ogni `<offerta>`.
 4. DB nuovo → `PRAGMA integrity_check` → controlli: offerte ≥ 50% dell'esecuzione precedente, nessuna chiave nulla o duplicata, parametri obbligatori presenti, ultimo PUN recente (solo warning).
 5. Se tutto passa: rename atomico, versione precedente in `offerte.db.prev`. Se no: DB in uso intatto, errore in `etl_run`, exit code ≠ 0.
@@ -117,7 +115,13 @@ Regole: funzioni pure, `Decimal`; un'offerta non calcolabile (struttura non supp
 
 ## 10. Interfacce per agenti
 
-Un'unica libreria, due frontend sottili (CLI e MCP) che espongono le stesse funzioni. Una sola implementazione per operazione — validazione, limiti, errori, schema di output — e i frontend traducono solo formato di ingresso e uscita: niente regole duplicate tra CLI e MCP. Linee guida di design, valide per qualunque harness (anche piccoli, come Pi):
+Un'unica libreria e un server MCP sottile, che costituisce l'unico punto di
+contatto degli agenti con il DB. Una sola implementazione per operazione —
+validazione, limiti, errori, schema di output — e MCP traduce solo il formato
+del protocollo: niente regole duplicate. Una CLI locale può essere utile per il
+debug, ma non è un'interfaccia supportata per agenti, non è esposta in
+produzione e non richiede una parità contrattuale con MCP. Linee guida di
+design, valide per qualunque harness (anche piccoli, come Pi):
 
 - **Output strutturato, non prosa**: JSON con campi dai nomi autoesplicativi e unità esplicite (`_eur`, `_eur_mwh`, `_kwh`). Nel server MCP, dichiara lo schema di output dove l'SDK lo supporta.
 - **Pochi tool, ben documentati**: la descrizione di ogni tool e di ogni parametro deve bastare a un agente per usarlo senza leggere altro (enum ammessi, unità, esempi, limiti). I tool si scoprono dalla documentazione.
@@ -126,7 +130,7 @@ Un'unica libreria, due frontend sottili (CLI e MCP) che espongono le stesse funz
 - **Testo dei venditori = dato non fidato**: in campi marcati (es. `descrizione_venditore`), mai concatenato in istruzioni o messaggi generati dal server.
 - **Errori strutturati** (`codice`, `messaggio`), senza stack trace né percorsi.
 
-Funzioni (CLI: `offerte <comando> --json`; MCP: stesso nome, annotazione di sola lettura):
+Funzioni MCP (nomi stabili, annotazione di sola lettura):
 
 - `confronta_offerte(tipo_cliente, consumo_annuo_kwh, ripartizione_fasce?, potenza_kw?, tipo_prezzo?, pun_scenario_eur_mwh?, cod_offerte?, n=10)` → classifica con `costo_annuo_eur`, `dettaglio_componenti`, `ipotesi`, `non_calcolabili`, `dati_aggiornati_al`, `avvertenze`
 - `cerca_offerte(venditore?, tipo_cliente?, tipo_prezzo?, indicizzata?, testo?, limit=20)`
@@ -139,11 +143,18 @@ Il DB si apre con `file:...?mode=ro` e `PRAGMA query_only=ON`. Nessuna funzione 
 
 Stack: Python, SDK ufficiale `mcp` (FastMCP) con transport streamable HTTP, `uv`, versioni pinnate; verifica la documentazione attuale dell'SDK e della specifica MCP prima di implementare.
 
-## 11. Autenticazione
+## 11. Accesso pubblico e rate limiting
 
-**API key per agente**, implementate direttamente nel server: nessuna interfaccia `TokenVerifier` astratta finché non esiste un secondo meccanismo. Token casuali ≥ 256 bit in `Authorization: Bearer`; si conserva solo l'hash SHA-256, con etichetta, data, stato. Gestione con `authctl create|list|revoke` (`python -m offerte.auth`). File auth separato dal DB dati. Rate limit per chiave in memoria (token bucket, default 60 richieste/minuto, configurabile). Mai log del valore dei token né dei parametri di consumo.
+Il server MCP è intenzionalmente pubblico e non implementa autenticazione,
+API key, OAuth, sessioni o gestione di credenziali. La modalità privata usa lo
+stesso processo e lo stesso Compose, ma pubblica MCP solo su loopback.
 
-Fuori scope finché l'utente non lo chiede: **OAuth** per i client che accettano solo quello — validazione di JWT di un identity provider esterno (JWKS, `iss`, `aud` = URL canonico del server, scadenza) ed esposizione di `/.well-known/oauth-protected-resource` (RFC 9728). Il server non emette token; l'IdP lo sceglierebbe l'utente (candidati open source/UE: Zitadel, Keycloak).
+Quando il servizio è pubblico, `cloudflared` crea l'unico ingresso dalla VM e
+Cloudflare applica il rate limit per IP, oltre a TLS e alle protezioni di rete.
+Non si aggiunge un rate limiter applicativo, Redis o un reverse proxy locale.
+Il server resta stateless; non registra parametri di consumo né dati che non
+servono alla diagnosi. `/healthz` non richiede autenticazione e restituisce
+solo la readiness del DB.
 
 ## 12. Rete e deployment
 
@@ -163,7 +174,8 @@ Il layout runtime previsto per i volumi è:
 volume: l'ETL completa le validazioni e poi usa il rename atomico già previsto.
 Database e raw sono directory separate. Il servizio ETL monta entrambe in
 lettura/scrittura; il servizio MCP monta solo il database in sola lettura e non
-monta i raw.
+monta i raw. Non esiste un volume auth: il deployment non usa credenziali o
+sessioni applicative.
 
 I percorsi e il bind HTTP sono configurabili senza modificare il codice. I
 valori di una specifica opzione CLI prevalgono sull'ambiente:
@@ -174,14 +186,15 @@ valori di una specifica opzione CLI prevalgono sull'ambiente:
 | `OFFERTE_RAW_DIR` | `/var/lib/offerte/raw` | radice dei raw datati |
 | `OFFERTE_PARAMETRI` | non impostata | CSV dei parametri fornito al job ETL |
 | `OFFERTE_MCP_HOST` | `127.0.0.1` | interfaccia HTTP MCP, solo loopback in questa fase |
-| `OFFERTE_MCP_PORT` | `8000` | porta HTTP MCP |
+| `OFFERTE_MCP_PORT` | `8000` | porta HTTP MCP; precede la convenzione di piattaforma `PORT` |
+| `PORT` | non impostata | fallback della porta per piattaforme HTTP gestite |
 | `OFFERTE_MCP_CONSENTI_NON_LOOPBACK` | non impostata | apertura esplicita del bind non-loopback (container) |
 
 L'utente `offerte-etl` è proprietario della directory del database e dei raw;
 `offerte-mcp` appartiene al gruppo condiviso di lettura del database. La
 protezione effettiva del mount read-only di MCP è responsabilità della
 configurazione Docker/systemd, oltre a `mode=ro` e `PRAGMA query_only=ON` nel
-codice.
+codice. Non è previsto un file di credenziali per MCP.
 
 ### 12.2 Immagine Docker
 
@@ -228,19 +241,85 @@ database è leggibile in sola lettura, 1 se manca, 2 se non è leggibile. Non cr
 mai un database vuoto: un volume non inizializzato resta un errore controllato,
 non un database silenziosamente vuoto.
 
-- Una VM Linux (Debian stabile) in un provider UE scelto dall'utente. Aggiornamenti di sicurezza automatici, SSH con chiave.
-- **Cloudflare davanti come proxy**: DDoS, WAF, rate limit grossolano. L'origine non deve essere raggiungibile direttamente (altrimenti la protezione si aggira). **Solo Cloudflare Tunnel** (`cloudflared`): la VM apre solo connessioni in uscita, nessuna porta pubblica, il server MCP ascolta su `127.0.0.1` in HTTP semplice. Niente reverse proxy locale (Caddy) e nessuna 443 pubblica: un'alternativa senza Tunnel si valuterà solo se un giorno si lascia Cloudflare.
+- Una VM Linux (Debian stabile) in un provider UE scelto dall'utente. Aggiornamenti di sicurezza automatici, SSH con chiave. Kubernetes e altri orchestratori non fanno parte della prima fase.
+- **Cloudflare davanti come proxy**: DDoS, WAF e rate limit per IP. L'origine non deve essere raggiungibile direttamente (altrimenti la protezione si aggira). **Solo Cloudflare Tunnel** (`cloudflared`), preferibilmente come servizio Compose: la VM apre solo connessioni in uscita, nessuna porta pubblica, il server MCP ascolta su `127.0.0.1` in HTTP semplice. Niente reverse proxy locale (Caddy) e nessuna 443 pubblica.
   - Nota: nelle chiamate MCP (POST JSON-RPC dinamiche) la cache non serve; il valore di Cloudflare è nella mitigazione di DDoS e abusi.
-- Utenti di sistema separati: `offerte-etl` (scrive in `/var/lib/offerte`) e `offerte-mcp` (legge, e legge il file auth). Unit systemd con hardening: `NoNewPrivileges`, `ProtectSystem=strict`, `ProtectHome`, `PrivateTmp`, `ReadWritePaths` minimi, `MemoryMax`.
-- Backup: il DB è ricostruibile; solo file auth, configurazione e storico PUN.
-- `/healthz` senza dati per il monitoraggio.
+- Utenti di sistema separati: `offerte-etl` (scrive in `/var/lib/offerte`) e `offerte-mcp` (legge il DB). Unit systemd con hardening: `NoNewPrivileges`, `ProtectSystem=strict`, `ProtectHome`, `PrivateTmp`, `ReadWritePaths` minimi, `MemoryMax`.
+- Persistenza VPS: preferire directory host esplicite (`/var/lib/offerte/db`, `/var/lib/offerte/raw`) ai volumi Docker opachi, per semplificare backup e restore. In entrambi i casi DB attivo, `.new`, `.prev` e lock devono restare sullo stesso filesystem.
+- Backup: il DB è ricostruibile; salvare almeno configurazione e database attivo/precedente. I raw non sono conservati come requisito funzionale.
+- `/healthz` è una rotta HTTP senza autenticazione e senza dati applicativi: restituisce 200 solo quando il DB è leggibile, altrimenti 503; serve a Docker, systemd e futuri provider gestiti.
+
+### 12.5 Decisione di deployment e compatibilità futura con Manufact
+
+La prima produzione è **VPS + Docker Compose**. Il traffico iniziale è previsto
+basso, ma può avere picchi brevi e non prevedibili perché i client sono agenti.
+La VM offre il percorso più semplice per il DB SQLite, lo swap atomico e il
+restore; Cloudflare e il rate limit per IP limitano gli abusi. Non si
+introducono MySQL, PostgreSQL, Parquet, Redis, Kubernetes o code di messaggi.
+
+La migrazione futura a un servizio gestito/serverless, incluso Manufact Cloud,
+resta possibile se i confini del codice rimangono questi:
+
+- la logica applicativa (`offerte.ricerca`, futuro `calc`) riceve una connessione
+  SQLite e non conosce filesystem, Docker, Cloudflare o il provider;
+- `offerte.mcp` resta un adapter MCP sottile; l'endpoint HTTP è `/mcp`, mentre
+  `/healthz` non autenticato espone solo la readiness;
+- il processo HTTP ascolta su `0.0.0.0` solo quando il deployment lo richiede e
+  usa `OFFERTE_MCP_PORT`, con fallback alla variabile convenzionale `PORT`;
+- nessun dato importante viene conservato nel filesystem locale del processo
+  MCP: su una piattaforma senza storage persistente il DB futuro sarà un
+  artefatto SQLite immutabile in Object Storage, scaricato in `/tmp` e aperto
+  in sola lettura;
+- la sorgente del DB va isolata dietro un confine futuro (`local path` nella
+  VPS, `object artifact` nel serverless) senza duplicare query o calcoli;
+- il rate limit per IP deve stare al gateway; lo stato locale dell'applicazione
+  non può essere usato come limite globale se esistono più istanze;
+- il processo deve chiudersi correttamente su `SIGINT`: i client MCP devono
+  poter riconnettersi se una piattaforma sostituisce una deployment.
+
+Manufact Cloud documenta il deploy da GitHub con runtime Python oppure con un
+`Dockerfile` personalizzato, start command, porta e variabili per ambiente; il
+`Dockerfile` attuale è quindi una base compatibile, ma la configurazione di
+produzione dovrà selezionare esplicitamente il trasporto HTTP, per esempio:
+
+```text
+start command: python -m offerte.mcp --trasporto http
+port: 3000
+OFFERTE_MCP_HOST=0.0.0.0
+OFFERTE_MCP_PORT=3000
+OFFERTE_MCP_CONSENTI_NON_LOOPBACK=1
+```
+
+La modalità `stdio` resta il default per i client locali e non va sostituita.
+Le preview Manufact devono usare un DB non-produttivo; le variabili e i segreti
+vanno configurati nella piattaforma, mai committati nel repository. I deploy
+automatici vanno subordinati a `just check` e a uno smoke test MCP.
+
+Prima di migrare occorre inoltre validare il trasporto Streamable HTTP con le
+sessioni MCP e l'eventuale interruzione controllata degli stream durante un
+deploy. La documentazione Manufact indica una finestra massima di shutdown di
+300 secondi e richiede che i client possano riconnettersi.
+
+Fonti ufficiali consultate:
+
+- [Manufact Cloud quickstart](https://docs.manufact.com/dashboard/quickstart)
+- [Manufact build e deployment](https://docs.manufact.com/dashboard/deployments)
+- [Manufact environment variables](https://docs.manufact.com/dashboard/environment-variables)
+- [Manufact server settings](https://docs.manufact.com/dashboard/settings)
+- [MCP Python SDK: deploy e scale](https://py.sdk.modelcontextprotocol.io/run/deploy/)
+- [MCP Python SDK: custom health route](https://py.sdk.modelcontextprotocol.io/run/asgi/)
+
+Questa compatibilità è un vincolo di progettazione futuro, non un deployment
+Manufact già attivo. L'adapter Object Storage e l'eventuale gestione condivisa
+delle chiavi saranno task separati quando la migrazione sarà realmente utile.
 
 ## 13. Checklist di sicurezza
 
 - Download solo da allowlist, HTTPS, limiti di dimensione e timeout; parser XML hardened.
 - Swap del DB solo dopo validazione; DB in uso mai toccato in caso di errore.
 - Interfacce in sola lettura; nessun SQL libero; input con limiti rigidi.
-- Token hashati, rate limit per chiave, nessun dato di consumo nei log.
+- Nessuna autenticazione applicativa; rate limit per IP al gateway e nessun dato
+  di consumo nei log.
 - Testo dei venditori sanificato e marcato come non fidato.
 - Origine non raggiungibile se non attraverso Cloudflare.
 - Errori senza dettagli interni.
@@ -248,6 +327,6 @@ non un database silenziosamente vuoto.
 ## 14. Verifica
 
 - Parser testato sulla fixture; funzioni di calcolo su casi calcolati a mano (tre fasce uguali, fasce diverse, quota fissa, indicizzata con PUN di scenario, non calcolabile).
-- Test di sicurezza: scrittura sul DB impossibile dalle interfacce; richiesta senza token o con token revocato rifiutata; input fuori limite rifiutato; entità XML esterne non risolte; XML corrotto o troncato non sostituisce il DB in uso.
+- Test di sicurezza: scrittura sul DB impossibile dalle interfacce; rate limit per IP verificato al gateway; input fuori limite rifiutato; entità XML esterne non risolte; XML corrotto o troncato non sostituisce il DB in uso.
 - ETL idempotente.
 - `just check` (lint, tipi, test) è il comando unico di verifica; `just` ricrea tutto da zero.

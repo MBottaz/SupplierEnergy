@@ -15,6 +15,9 @@ VARIABILE_RAW_DIR = "OFFERTE_RAW_DIR"
 VARIABILE_PARAMETRI = "OFFERTE_PARAMETRI"
 VARIABILE_MCP_HOST = "OFFERTE_MCP_HOST"
 VARIABILE_MCP_PORT = "OFFERTE_MCP_PORT"
+# Nome convenzionale usato da piattaforme HTTP gestite (per esempio
+# Manufact Cloud). La configurazione specifica OFFERTE_MCP_PORT ha precedenza.
+VARIABILE_PORTA_PIATTAFORMA = "PORT"
 VARIABILE_MCP_CONSENTI_NON_LOOPBACK = "OFFERTE_MCP_CONSENTI_NON_LOOPBACK"
 
 NOME_DB_DEFAULT = Path("/var/lib/offerte/db/offerte.db")
@@ -57,8 +60,16 @@ def host_mcp_da_ambiente() -> str:
 
 
 def porta_mcp_da_ambiente() -> str:
-    """Restituisce la porta HTTP MCP come testo per il parsing di argparse."""
-    return os.environ.get(VARIABILE_MCP_PORT, str(PORTA_MCP_DEFAULT))
+    """Restituisce la porta HTTP MCP come testo per il parsing di argparse.
+
+    La variabile specifica del progetto ha precedenza; ``PORT`` consente di
+    eseguire lo stesso processo su piattaforme HTTP gestite che assegnano la
+    porta tramite la convenzione standard.
+    """
+    return os.environ.get(
+        VARIABILE_MCP_PORT,
+        os.environ.get(VARIABILE_PORTA_PIATTAFORMA, str(PORTA_MCP_DEFAULT)),
+    )
 
 
 def consenti_bind_non_loopback_da_ambiente() -> bool:

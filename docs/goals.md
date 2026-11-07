@@ -1,93 +1,104 @@
 # Obiettivi da implementare
 
-Elenco, in ordine di dipendenza, degli obiettivi **non ancora implementati**.
-Contesto stabile (design, schema, sicurezza) in `docs/architettura.md`; regole di
-lavoro in `AGENTS.md`; task operativi di un obiettivo in `docs/task.md`; lo stato
-attuale in `README.md`.
+Il primo obiettivo è una prova funzionale dell'MVP già presente: avviare MCP in
+**Streamable HTTP** e collegarlo a un LLM. Non si implementano nuove funzioni
+prima della prova.
 
-## Stato di partenza (già implementato)
+Contesto stabile in `docs/architettura.md`; task operativi in `docs/task.md`;
+stato e comandi in `README.md`.
 
-ETL completo (offerte XML, parametri CSV, PUN mensile) con validazione e swap
-atomico; accesso read-only al DB; funzione applicativa `cerca_offerte`; server
-MCP che la espone (stdio e HTTP su loopback), senza autenticazione. Dettagli e
-comandi in `README.md`, `docs/contratto_cerca_offerte.md`,
-`docs/validazione_xml.md`; il percorso che ha portato qui è in `docs/task.md`.
+## Decisioni di prodotto e sicurezza
 
-## Obiettivo 1 — Libreria, calcolo (fase A) e CLI
+MCP è l'unico punto di contatto fra l'LLM e il database. Nessun agente riceve
+accesso a shell, filesystem, SQLite o CLI. Nessun tool accetta codice, SQL
+libero o comandi da eseguire.
 
-**Cosa fare.** Le restanti funzioni di libreria di `docs/architettura.md` §10
-(`dettaglio_offerta`, `pun`, `decodifica`, `stato_dati`; `cerca_offerte` esiste
-già), il modulo `calc` per la **stima della spesa per la materia energia**
-(§9, fase A) e la CLI `offerte <comando> --json` su tutte le funzioni.
+Il server applicativo resta non autenticato. Non verranno implementati API key,
+`authctl`, OAuth, sessioni o un archivio di credenziali. La CLI non è
+un'interfaccia per agenti: se servirà, sarà soltanto un adapter locale di debug.
 
-**Come.** Prima i test di `calc` con casi calcolati a mano (tre fasce uguali,
-fasce diverse, quota fissa, indicizzata con PUN di scenario, offerta non
-calcolabile), poi l'implementazione. Output strutturato con unità esplicite,
-limiti rigidi, testo dei venditori in campi marcati. Una sola implementazione
-per operazione, condivisa con il server MCP.
+## Stato utilizzabile per la prova
 
-**Vincoli aperti.** Le questioni su fasce/indici, offerte miste e sconti
-(`docs/questioni_aperte.md` #5, #6, #7, #9) vanno risolte o gestite come
-`non_calcolabile` con motivo, mai con un costo inventato.
+È già disponibile:
 
-**Fatto quando.** `just check` verde; `offerte confronta --json ...` restituisce
-una classifica con ipotesi e `non_calcolabili`; la CLI non ha modo di scrivere
-sul DB.
+- ETL manuale di offerte XML, parametri CSV e PUN mensile;
+- database SQLite letto da MCP in sola lettura;
+- tool `cerca_offerte` nella libreria e nel server MCP;
+- trasporto Streamable HTTP su loopback;
+- readiness `/healthz`;
+- immagine Docker non-root e Compose;
+- fixture locale e test di integrazione HTTP;
+- `just check`.
 
-## Obiettivo 2 — Completamento del server MCP e autenticazione
+Il primo test usa questa superficie senza aggiungere tool o calcoli.
 
-**Cosa fare.** Esporre come tool MCP anche `confronta_offerte`,
-`dettaglio_offerta`, `pun`, `decodifica` e `stato_dati`, come strato sottile
-sulla libreria (stesse funzioni e nomi della CLI). API key dirette nel server
-(hash SHA-256, rate limit per chiave, niente interfaccia `TokenVerifier` finché
-serve un solo meccanismo); `authctl` (`python -m offerte.auth`).
+## Obiettivo 1 — Prova funzionale MCP + LLM
 
-**Dipende da.** Obiettivo 1 (le funzioni che i tool espongono).
+### Passi necessari
 
-**Fatto quando.** Un client MCP di test elenca i tool, ne chiama almeno tre con
-successo, riceve rifiuto senza token o con token revocato e un errore strutturato
-su input fuori limite; nessun log contiene token o consumi.
+1. Preparare un database già valido, oppure caricare la fixture con
+   `just etl-fixture`.
+2. Avviare l'ETL fixture e il servizio `offerte-mcp` con il Compose locale.
+3. Verificare `/healthz` e i test HTTP già presenti.
+4. Rendere il servizio raggiungibile dal LLM tramite un Tunnel temporaneo verso
+   `127.0.0.1:8000`, senza pubblicare direttamente la porta MCP.
+5. Configurare il client MCP dell'LLM con l'endpoint `/mcp` in Streamable HTTP.
+6. Verificare discovery e chiamata reale di `cerca_offerte`.
 
-## Obiettivo 3 — Deployment
+### Criterio di completamento
 
-**Cosa fare.** Unit e timer systemd con hardening, utenti di sistema separati,
-configurazione di `cloudflared` come da `docs/architettura.md` §12 (solo Tunnel,
-nessun reverse proxy locale), README con setup, gestione delle chiavi,
-ripristino.
+L'LLM si connette all'endpoint Streamable HTTP, scopre `cerca_offerte`, esegue
+una chiamata e riceve una risposta strutturata. `just check`, Compose config,
+readiness e test HTTP passano.
 
-**Dipende da.** Obiettivi 1–2; verifica della licenza d'uso dei dati per il
-servizio verso terzi (`docs/questioni_aperte.md` #1).
+Il Tunnel temporaneo è soltanto per la prova: l'endpoint è pubblico e senza
+autenticazione, quindi non va usato per dati o traffico di terzi.
 
-**Fatto quando.** Da una VM pulita, seguendo il README, ETL e server partono;
-l'origine non è raggiungibile se non attraverso Cloudflare.
+## Dopo la prova funzionale
 
-## Obiettivo 4 — ETL: download del CSV dei parametri
+Solo se la prova è riuscita e si decide di continuare, affrontare le attività
+operative seguenti:
 
-**Cosa fare.** Collegare in `etl scarica` il download del CSV dei parametri
-dall'URL datato (`.../parametriML/AAAA_MM/PO_Parametri_Mercato_Libero_E_AAAAMMGG.csv`,
-vedi `docs/questioni_aperte.md` → "Risolte"), con la stessa allowlist, gli stessi
-limiti di dimensione e il riferimento dalla data nel nome file usati per l'XML.
+- download automatico del CSV dei parametri;
+- bootstrap idempotente della VM;
+- directory host definitive e retention dei raw;
+- timer systemd giornalieri/mensili, lock e retry ETL;
+- Tunnel nominato e configurazione Cloudflare permanente;
+- rate limiting per IP;
+- backup, restore, rollback e test su macchina pulita;
+- runbook operativo, monitoraggio e gestione dei rilasci;
+- verifica della licenza prima di offrire il servizio a terzi.
 
-**Dipende da.** Niente.
+Queste attività migliorano la produzione, ma non sono necessarie per la prima
+prova MCP–LLM.
 
-**Fatto quando.** `just etl-scarica` carica offerte e parametri senza passare il
-CSV a mano; `just check` verde.
+## Funzioni post-MVP
 
-## Fuori scope finché l'utente non lo chiede
+Dopo la stabilizzazione del deployment minimo si potranno valutare, nell'ordine
+che verrà concordato:
 
-- spesa totale stimata con le componenti regolate (fase B, §9);
-- PUN giornaliero dal GME (§4);
-- OAuth con identity provider esterno (§11).
+- `dettaglio_offerta(piva, cod_offerta)`;
+- `pun(da, a, aggregazione="mensile")`;
+- `decodifica(dominio, codice?)`;
+- `stato_dati()`;
+- `confronta_offerte`;
+- stima della sola materia energia con `Decimal` e risultati
+  `non_calcolabile` espliciti;
+- CLI locale per debug, mai per agenti o produzione.
 
-## Come si procede
+## Fuori scope
 
-- Un obiettivo alla volta, nell'ordine. A fine obiettivo: riepilogo di 5–10 righe
-  (fatto, verificato, questioni aperte) e ci si ferma.
-- Un task per volta, piccolo e verificabile: prima il test (o il comando di
-  verifica), poi l'implementazione, un commit per task.
-- Un obiettivo è chiuso solo quando il suo criterio è verificato eseguendo i
-  comandi (`just check`), non per dichiarazione.
-- Dubbi su codici del tracciato, formule, fonti o termini d'uso:
-  `docs/questioni_aperte.md`; si procede sul resto, senza indovinare.
-- Mai leggere l'XML o il CSV completo nel contesto: script e query con output
-  piccolo (`LIMIT`).
+- autenticazione API key, `authctl`, OAuth, JWKS e identity provider;
+- accesso dell'LLM alla shell, al filesystem, al DB o alla CLI;
+- SQL libero, codice o comandi eseguiti tramite MCP;
+- spesa totale con componenti regolate (fase B);
+- PUN giornaliero dal GME;
+- Kubernetes, database server, Redis, code, reverse proxy locale e stack
+  separati di metriche/alerting.
+
+## Regola di lavoro
+
+Un task alla volta, piccolo e verificabile. Prima della prova non si aggiungono
+feature: si usano i comandi e il codice già presenti. Dopo la prova, ogni
+attività operativa o funzionale viene introdotta separatamente e verificata con
+`just check` e il test pertinente.

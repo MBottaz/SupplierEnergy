@@ -18,6 +18,9 @@ dependencies = [
     # `BaseModel`): stessa versione che `mcp` richiede, dichiarata perché il
     # codice la importa.
     "pydantic==2.14.1",
+    # La rotta /healthz usa l'API custom-route dell'SDK MCP e le response
+    # Starlette direttamente; la versione è allineata al lock dell'SDK.
+    "starlette==1.10.0",
 ]
 
 [dependency-groups]

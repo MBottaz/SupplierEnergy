@@ -1,7 +1,8 @@
 """Funzione applicativa condivisa `cerca_offerte`.
 
-Una sola implementazione per MCP e (in futuro) CLI: validazione, limiti,
-ordinamento e forma del risultato stanno qui. Il contratto è in
+Una sola implementazione per il server MCP e per eventuali strumenti locali di
+debug: validazione, limiti, ordinamento e forma del risultato stanno qui. Il
+contratto è in
 `docs/contratto_cerca_offerte.md`; il server MCP traduce solo il protocollo.
 
 Nessun calcolo di costo, nessun accesso alla rete, nessuna scrittura. Il testo

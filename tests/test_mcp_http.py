@@ -15,6 +15,7 @@ import sys
 import time
 from pathlib import Path
 from typing import Any, cast
+from urllib.request import urlopen
 
 from mcp import Client
 
@@ -61,6 +62,8 @@ def test_http_espone_il_tool_e_non_modifica_il_db(tmp_path: Path) -> None:
     )
     try:
         _attendi_porta("127.0.0.1", porta)
+        with urlopen(f"http://127.0.0.1:{porta}/healthz", timeout=5) as risposta:
+            assert risposta.status == 200
         prima = hashlib.sha256(db.read_bytes()).hexdigest()
 
         async def scenario() -> None:

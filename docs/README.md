@@ -5,7 +5,8 @@ le regole di lavoro in `AGENTS.md`.
 
 ## Il sistema esistente
 
-- `architettura.md` — design del sistema, modello dati, ETL, sicurezza: il
+- `architettura.md` — design del sistema, modello dati, ETL, sicurezza e
+  strategia di deployment VPS-first con compatibilità futura Manufact: il
   riferimento stabile a cui allineare il codice.
 - `contratto_cerca_offerte.md` — contratto della funzione e del tool
   `cerca_offerte` già implementati.

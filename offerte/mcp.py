@@ -1,8 +1,9 @@
 """Server MCP minimale: espone `cerca_offerte` in sola lettura.
 
 Strato sottile: la validazione e la ricerca stanno nella funzione applicativa
-condivisa (`offerte.ricerca.cerca_offerte`), riusabile anche dalla futura CLI.
-Qui si traduce solo l'ingresso/uscita del protocollo MCP e l'errore strutturato.
+condivisa (`offerte.ricerca.cerca_offerte`). MCP è l'unico punto di contatto per
+gli agenti; qui si traduce solo l'ingresso/uscita del protocollo MCP e l'errore
+strutturato.
 
 L'SDK ufficiale (`mcp==2.3.0`) è l'unica dipendenza oltre alla libreria: nessun
 framework web aggiuntivo. Il trasporto di default è stdio; quello HTTP
@@ -22,6 +23,8 @@ from typing import Annotated, Any
 from mcp.server import MCPServer
 from mcp.types import CallToolResult, TextContent, ToolAnnotations
 from pydantic import BaseModel, ConfigDict, Field
+from starlette.requests import Request
+from starlette.responses import JSONResponse
 
 from offerte import config
 from offerte.db import apri_db
@@ -66,8 +69,8 @@ class Filtri(BaseModel):
     """Ingresso del tool: filtri opzionali, validati dalla libreria.
 
     I campi sono annotati `Any` di proposito: gli unici controlli sono quelli di
-    `offerte.ricerca`, così i messaggi d'errore sono strutturati e unici fra MCP
-    e CLI. `extra="allow"` fa arrivare alla libreria anche le chiavi non
+    `offerte.ricerca`, così i messaggi d'errore sono strutturati in un solo punto.
+    `extra="allow"` fa arrivare alla libreria anche le chiavi non
     previste, che vengono rifiutate con `filtro_non_supportato` invece di essere
     ignorate in silenzio.
     """
@@ -133,6 +136,14 @@ def crea_server(percorso_db: str | Path | None = None) -> MCPServer:
             "Nessun calcolo di costo, nessuna scrittura, nessun accesso alla rete."
         ),
     )
+
+    @server.custom_route(  # type: ignore[untyped-decorator]
+        "/healthz", methods=["GET"], include_in_schema=False
+    )
+    async def healthz(_request: Request) -> JSONResponse:
+        """Readiness HTTP senza autenticazione o dati applicativi."""
+        codice, stato = verifica_avvio(database)
+        return JSONResponse(stato, status_code=200 if codice == 0 else 503)
 
     @server.tool(
         name="cerca_offerte",

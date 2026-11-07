@@ -1,8 +1,10 @@
 # Contratto di `cerca_offerte`
 
 Contratto stabile del primo tool MCP e della funzione applicativa condivisa.
-Vale per il server MCP e, in futuro, per la CLI: entrambi delegano alla stessa
-funzione `offerte.ricerca.cerca_offerte`.
+MCP è l'unico punto di contatto per gli agenti e delega alla funzione
+`offerte.ricerca.cerca_offerte`. Una eventuale CLI è solo un adapter locale di
+debug: non è una superficie per agenti, non fa parte del deployment e non
+costituisce un secondo contratto pubblico.
 
 ## Scopo
 

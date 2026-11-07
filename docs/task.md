@@ -1,90 +1,138 @@
-# Task: scheduling esterno e documentazione operativa del deployment
+# Task: deployment funzionale minima dell'MVP
 
-`compose.yml` definisce i due servizi applicativi da una sola immagine:
-`offerte-mcp` (long-running, sola lettura) e `offerte-etl` (batch, swap atomico,
-profilo `etl`). Questa parte del deployment è completata; qui resta il passo
-successivo: lo scheduling esterno e la documentazione operativa.
+L'obiettivo immediato non è una produzione autonoma e hardened. È avviare il
+server MCP già presente, via **Streamable HTTP**, e collegarlo a un LLM per
+provare il tool esistente `cerca_offerte`.
 
-Confine di questa fase: nessuna autenticazione API key, nessun Cloudflare
-Tunnel, nessuna esposizione pubblica. Il server non deve essere pubblicato su
-Internet finché non è completato l'obiettivo di autenticazione. La topologia
-Docker e la distinzione dei permessi sono in `deploy/README.md` e
-`docs/architettura.md` §12.
+Non si aggiungono tool, calcolo costi, autenticazione o CLI. Il DB deve essere
+un artefatto già caricato; l'automazione ETL può essere eseguita manualmente
+per preparare il test.
 
----
+## Confini dell'MVP di prova
 
-## 1. Integrare lo scheduling esterno e la documentazione operativa
+- MCP è l'unico punto di contatto per l'LLM.
+- L'LLM non riceve shell, filesystem, SQLite o CLI.
+- Il solo tool disponibile è `cerca_offerte`.
+- Il server apre il DB in sola lettura.
+- L'accesso HTTP locale è pubblicato su `127.0.0.1:8000`.
+- Per un LLM remoto si usa temporaneamente un Tunnel verso quella porta.
+- Il Tunnel di prova non è una configurazione di produzione: l'endpoint è
+  pubblico e non autenticato; non usarlo per dati o traffico di terzi.
 
-### Azioni
+## Passi strettamente necessari prima della prova
 
-1. Non usare un processo scheduler dentro il container.
+### 1. Preparare un database valido
 
-2. Preparare un esempio di timer `systemd` sulla VM che esegua il job ETL con
-   `docker compose --profile etl run --rm offerte-etl` o un wrapper equivalente.
+Usare un DB già prodotto oppure caricare la fixture, senza implementare nuovo
+codice. Per eseguire l'ETL della fixture dentro l'immagine Docker:
 
-3. Configurare il timer con:
+```bash
+docker compose -f compose.yml -f deploy/compose.local.yml run --build --rm offerte-etl
+```
 
-   - una sola esecuzione alla volta;
-   - retry controllati per errori transitori di rete;
-   - log dell'exit code e dell'output JSON dell'ETL;
-   - intervallo giornaliero per offerte e parametri;
-   - intervallo mensile separato per l'aggiornamento PUN, se mantenuto come job
-     distinto.
+In alternativa è sufficiente `just etl-fixture` se si vuole preparare il DB
+localmente. La fixture serve a verificare avvio, discovery e chiamata del tool.
+È scaduta, quindi può restituire zero offerte con il filtro di validità
+predefinito. Per risultati non vuoti usare un DB prodotto da dati reali già
+disponibili.
 
-4. Documentare nel README:
+### 2. Avviare MCP in Streamable HTTP
 
-   - build dell'immagine;
-   - inizializzazione dei volumi e dei permessi;
-   - avvio del servizio MCP locale;
-   - esecuzione manuale dell'ETL;
-   - installazione e test del timer;
-   - verifica dello swap atomico;
-   - ripristino da `offerte.db.prev`;
-   - comportamento in assenza del database;
-   - posizione dei raw e policy di conservazione.
+Per la prova locale con la fixture:
 
-5. Documentare chiaramente che questa fase non abilita ancora:
+```bash
+docker compose -f compose.yml -f deploy/compose.local.yml up --build -d offerte-mcp
+```
 
-   - autenticazione API key;
-   - Cloudflare Tunnel;
-   - esposizione pubblica;
-   - OAuth;
-   - tool MCP aggiuntivi.
+Il servizio ascolta nel container su HTTP, ma la porta dell'host resta
+pubblicata solo su loopback.
 
-6. Aggiornare `deploy/README.md` con la topologia Docker e con la distinzione
-   fra i permessi ETL e MCP.
+### 3. Verificare la readiness e il protocollo
 
-7. Aggiungere test o script di smoke test per una VM/container pulito:
+```bash
+curl -fsS http://127.0.0.1:8000/healthz
+just test
+```
 
-   ```text
-   build immagine → crea volumi → esegue ETL → avvia MCP → chiama cerca_offerte
-   ```
+`just test` verifica anche discovery del tool, chiamate in-memory, integrazione
+stdio e integrazione HTTP locale. La readiness deve rispondere solo se il DB è
+leggibile; il server non deve creare un DB vuoto.
 
-8. Prima di ogni commit che modifica comandi, struttura o comportamento,
-   aggiornare `README.md` e verificare il risultato con:
+### 4. Rendere raggiungibile il server dal LLM
 
-   ```text
-   just check
-   ```
+Se il LLM è remoto e non può raggiungere la macchina direttamente, avviare
+temporaneamente un Tunnel verso la porta già pubblicata su loopback:
 
-### Verifica
+```bash
+cloudflared tunnel --url http://127.0.0.1:8000
+```
 
-- Da un ambiente Docker pulito, seguendo il README, l'ETL completa il primo
-  caricamento e MCP risponde a `cerca_offerte`.
-- Il timer non avvia due ETL contemporaneamente.
-- Il servizio MCP può essere riavviato senza perdita del database attivo.
-- Il ripristino da `.prev` è documentato e verificabile.
-- Nessuna porta pubblica viene aperta dalla configurazione di questa fase.
-- `just check` passa e gli smoke test Docker sono ripetibili.
+Usare nel client MCP dell'LLM l'URL fornito da `cloudflared`, aggiungendo il
+percorso `/mcp`, per esempio:
 
----
+```text
+https://<nome-temporaneo>.trycloudflare.com/mcp
+```
 
-## Fuori scope di questo task
+Non pubblicare la porta 8000 direttamente su Internet e non impostare il bind
+non-loopback dell'applicazione per questa prova.
 
-- API key, autenticazione e rate limiting applicativo;
-- Cloudflare Tunnel e configurazione del proxy pubblico;
-- OAuth, JWKS e identity provider;
-- tool MCP diversi da `cerca_offerte`;
-- calcolo dei costi;
-- modifica dello schema SQLite, salvo necessità dimostrata dal deployment;
-- orchestratori come Kubernetes o Docker Swarm.
+### 5. Eseguire la prova end-to-end
+
+Dal client LLM:
+
+1. connettersi all'endpoint Streamable HTTP `/mcp`;
+2. verificare la discovery di `cerca_offerte`;
+3. invocare `cerca_offerte` con un filtro semplice;
+4. verificare che la risposta sia strutturata e che eventuali errori siano
+   restituiti come risultati controllati;
+5. verificare che il container MCP non abbia modificato il DB.
+
+La prova è riuscita quando l'LLM completa discovery e chiamata di
+`cerca_offerte` attraverso Streamable HTTP.
+
+### 6. Arrestare il test
+
+```bash
+docker compose -f compose.yml -f deploy/compose.local.yml down
+```
+
+Chiudere il processo `cloudflared` al termine della prova.
+
+## Spostato dopo la prova funzionale
+
+Queste attività non devono bloccare il primo collegamento LLM-MCP e saranno
+affrontate solo se il test è utile:
+
+- download automatico del CSV dei parametri;
+- timer systemd e retry ETL;
+- bootstrap idempotente di una VM di produzione;
+- Tunnel nominato e configurazione Cloudflare permanente;
+- rate limiting per IP;
+- backup, restore, rollback e test periodici su macchina pulita;
+- runbook operativo completo e osservabilità;
+- verifica della licenza prima di offrire il servizio a terzi;
+- directory host definitive, retention raw e gestione completa dei release;
+- `dettaglio_offerta`, `pun`, `decodifica`, `stato_dati`;
+- `confronta_offerte` e calcolo dei costi;
+- CLI locale di debug, solo se sarà utile agli sviluppatori.
+
+## Criterio di chiusura della prova
+
+Prima di considerare l'MVP funzionalmente provato devono passare:
+
+```bash
+just check
+docker compose -f compose.yml -f deploy/compose.local.yml config
+```
+
+Inoltre devono riuscire la readiness locale, la discovery MCP e una chiamata
+reale a `cerca_offerte` dall'LLM tramite l'endpoint Streamable HTTP.
+
+## Fuori scope
+
+- autenticazione API key, `authctl`, OAuth, JWKS e identity provider;
+- accesso dell'LLM alla shell, al filesystem, al DB o alla CLI;
+- SQL libero, codice o comandi eseguiti tramite MCP;
+- nuovi tool o nuove formule di calcolo;
+- PUN giornaliero, fase B e deployment Kubernetes/database server.
