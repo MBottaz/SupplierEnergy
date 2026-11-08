@@ -38,7 +38,7 @@ HOST_AMMESSI = frozenset({"127.0.0.1", "::1", "localhost"})
 
 #: Descrizione del tool: è il contratto che un agente legge da `tools/list`.
 #: Deve bastare da sola (filtri, enum, limiti, semantica delle zone, limiti del
-#: modello). Il contratto esteso è in `docs/contratto_cerca_offerte.md`.
+#: modello). Il contratto esteso è in `docs/cerca_offerte_contract.md`.
 DESCRIZIONE_TOOL = """\
 Cerca le offerte di energia elettrica del mercato libero nel database locale
 (aperto in sola lettura). Non calcola costi e non modifica i dati.

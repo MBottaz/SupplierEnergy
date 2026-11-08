@@ -1,4 +1,4 @@
-"""Download condizionale dei file grezzi (docs/architettura.md §8).
+"""Download condizionale dei file grezzi (docs/architecture.md §8).
 
 Regole:
 

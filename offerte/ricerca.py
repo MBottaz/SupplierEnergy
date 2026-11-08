@@ -3,7 +3,7 @@
 Una sola implementazione per il server MCP e per eventuali strumenti locali di
 debug: validazione, limiti, ordinamento e forma del risultato stanno qui. Il
 contratto è in
-`docs/contratto_cerca_offerte.md`; il server MCP traduce solo il protocollo.
+`docs/cerca_offerte_contract.md`; il server MCP traduce solo il protocollo.
 
 Nessun calcolo di costo, nessun accesso alla rete, nessuna scrittura. Il testo
 libero dei venditori viene restituito marcato come non fidato e non entra mai in

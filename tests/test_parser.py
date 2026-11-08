@@ -1,4 +1,4 @@
-"""Parser tollerante dell'XML delle offerte (docs/architettura.md §5).
+"""Parser tollerante dell'XML delle offerte (docs/architecture.md §5).
 
 L'XML non previsto non fa mai fallire il caricamento: finisce in `extra` e
 incrementa l'insieme dei percorsi sconosciuti.

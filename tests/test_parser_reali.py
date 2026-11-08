@@ -2,7 +2,7 @@
 
 I primi due test lavorano sugli XML completi in `raw/` (file non versionati): se
 non ci sono, vengono saltati. I conteggi sono ancorati allo snapshot del
-2026-10-14 documentato in `docs/validazione_xml.md`, così non cambiano a ogni
+2026-10-14 documentato in `docs/xml_validation.md`, così non cambiano a ogni
 scarico; l'ultimo raw scaricato è usato invece per il controllo strutturale
 (nessun percorso sconosciuto). Gli altri test usano frammenti XML scritti a mano
 per fissare il comportamento dei percorsi ripetuti e dei campi noti senza
@@ -23,7 +23,7 @@ RAW = Path(__file__).parent.parent / "raw"
 TESTA = '<offerta xmlns="http://www.acquirenteunico.it/schemas/SII_AU/OffertaRetail/01">'
 
 
-#: Snapshot dell'XML validato a mano in `docs/validazione_xml.md`.
+#: Snapshot dell'XML validato a mano in `docs/xml_validation.md`.
 SNAPSHOT = RAW / "2026-10-14" / "PO_Offerte_E_MLIBERO_20261014.xml"
 
 

@@ -1,4 +1,4 @@
--- Schema del database delle offerte (docs/architettura.md §6).
+-- Schema del database delle offerte (docs/architecture.md §6).
 -- Formato "long": fasce F1/F2/F3 e quote fisse sono righe di `componente`.
 -- I CHECK non ripetono i domini di `codifica`: il parser è tollerante e un
 -- codice non previsto non deve far fallire il caricamento.

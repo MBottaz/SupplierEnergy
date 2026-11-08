@@ -1,6 +1,6 @@
 """Parametri regolati dal CSV `PO_Parametri_Mercato_Libero_E_AAAAMMGG.csv`.
 
-Regole (docs/architettura.md §4 e §7):
+Regole (docs/architecture.md §4 e §7):
 
 - la data nel nome del file è la data di riferimento: si salva con i valori;
 - le righe si caricano così come sono, senza interpretare i nomi;

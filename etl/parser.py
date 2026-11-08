@@ -1,4 +1,4 @@
-"""Parser tollerante dell'XML delle offerte (docs/architettura.md §5).
+"""Parser tollerante dell'XML delle offerte (docs/architecture.md §5).
 
 Regole:
 

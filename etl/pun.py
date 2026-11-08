@@ -12,7 +12,7 @@ si converte in €/MWh moltiplicando per 1000, senza indovinare formati diversi.
 
 La serie salvata è `PUN_MENSILE`: un valore per mese, senza dire come è pesato.
 Che sia la media aritmetica dei PUN giornalieri o il PUN Index GME ponderato per
-le quantità è una questione aperta (docs/questioni_aperte.md): si salva il dato
+le quantità è una questione aperta (docs/open_questions.md): si salva il dato
 così come pubblicato e la scelta dell'indice per una singola offerta spetta al
 calcolo (fase 4), non a questo modulo.
 """

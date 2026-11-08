@@ -2,7 +2,7 @@
 
 Nessuna interrogazione del database: qui si controlla solo che il server si
 istanzi, che un client MCP in-memory lo scopra e che lo schema degli input sia
-quello del contratto (`docs/contratto_cerca_offerte.md`).
+quello del contratto (`docs/cerca_offerte_contract.md`).
 """
 
 from __future__ import annotations

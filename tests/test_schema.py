@@ -1,4 +1,4 @@
-"""Schema SQLite: tabelle, chiavi e vincoli minimi (docs/architettura.md §6)."""
+"""Schema SQLite: tabelle, chiavi e vincoli minimi (docs/architecture.md §6)."""
 
 import sqlite3
 from collections.abc import Iterator

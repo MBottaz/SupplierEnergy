@@ -1,4 +1,4 @@
-"""Codifiche ufficiali del tracciato (docs/architettura.md §6, tabella `codifica`).
+"""Codifiche ufficiali del tracciato (docs/architecture.md §6, tabella `codifica`).
 
 Le decodifiche sono copiate dal tracciato ufficiale, non indovinate: ogni
 dominio qui è stato letto dal documento citato in `FONTE`.
