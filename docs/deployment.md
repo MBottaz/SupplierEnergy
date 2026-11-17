@@ -2,7 +2,9 @@
 
 Operational detail for the Docker image, the Compose services and the target VPS. Stable design and data model: `docs/architecture.md`. Current commands and environment variables: `README.md`. The folder `deploy/` holds only the configuration files; this document explains them.
 
-The first production deployment is a single Debian VPS with Docker Compose: `offerte-mcp` is long-running, `offerte-etl` is a one-shot batch job launched by an external systemd timer, and `cloudflared` is the only public ingress. The MCP service is intentionally unauthenticated; Cloudflare provides the public edge and per-IP rate limiting. Agents have no shell, filesystem, database or CLI access: MCP is the only agent-facing interface. Kubernetes, MySQL/PostgreSQL, Parquet, Redis and message queues are intentionally deferred.
+The deployment path is locked as Path A: Cloudflare at the edge, Python at the origin (see `docs/roadmap.md`). A single Debian host (EU provider chosen by the user; not yet provisioned) runs Docker Compose: `offerte-mcp` is long-running, `offerte-etl` is a one-shot batch job launched by an external systemd timer, and `cloudflared` is the only public ingress. The MCP service is intentionally unauthenticated; Cloudflare provides the public edge and per-IP rate limiting. Agents have no shell, filesystem, database or CLI access: MCP is the only agent-facing interface. Kubernetes, MySQL/PostgreSQL, Parquet, Redis and message queues are intentionally deferred. Cloudflare Workers/D1/Durable Objects/R2 are not used as runtime or database (see `docs/architecture.md` §11).
+
+Two ingress phases: **debugging** (Objectives 1–2 in the roadmap) uses a temporary Tunnel with the Cloudflare default URL (`*.trycloudflare.com`) — no own domain is configured yet, and the endpoint is for debugging only, never for third-party traffic. **Production** (Objective 3) adds an own domain, a named Tunnel and edge rate limiting.
 
 ## Runtime layout
 
@@ -59,7 +61,7 @@ The MCP container must keep its database mount read-only and must not be given a
 - `offerte-mcp` is long-running, runs as the non-root `offerte-mcp` user, mounts the database read-only, has a read-only root filesystem with a `tmpfs` for `/tmp`, drops all capabilities, and publishes the MCP port only on the host loopback (`127.0.0.1:${OFFERTE_MCP_PORT:-8000}:8000`). It does not mount the raw directory. Inside the container it listens on `0.0.0.0`, because only then does the published port reach the process: the non-loopback bind is made explicit by `OFFERTE_MCP_CONSENTI_NON_LOOPBACK`, never implicit. A healthcheck runs `python -m offerte.mcp --verifica`.
 - `offerte-etl` is a batch job under the `etl` profile, runs as `offerte-etl`, mounts the database and the dated raw directory read-write, uses `restart: "no"` and exits when the ETL finishes. It is never started by `docker compose up` and is not started by MCP.
 
-The database volume holds `offerte.db`, its `.new` and `.prev` snapshots, and the `etl.lock` file. The parameter CSV is mounted (not baked into the image) until its automatic download exists; its filename must keep the `PO_Parametri_..._AAAAMMGG.csv` form because the date is read from it.
+The database volume holds `offerte.db`, its `.new` and `.prev` snapshots, and the `etl.lock` file. The parameter CSV is mounted (not baked into the image): for v1 the current snapshot (`OFFERTE_PARAMETRI_NOME`, default `PO_Parametri_Mercato_Libero_E_20261014.csv`) is updated **manually** by replacing the file on the host. Its filename must keep the `PO_Parametri_..._AAAAMMGG.csv` form because the date is read from it. Automatic parameter download replaces the manual step in the production objective; until then, a stale snapshot is a known, documented limitation, not a silent failure.
 
 Copy `.env.example` to `.env` to override the port and the parameter CSV location, then build and start MCP (the database volume must already contain a database produced by the ETL):
 
@@ -81,19 +83,21 @@ Two overlapping ETLs must never read and replace the same database. The lock is 
 
 MCP readiness is `python -m offerte.mcp --verifica`: exit 0 if the database is readable read-only, 1 if missing, 2 if unreadable. It never creates an empty database: an uninitialized volume stays a controlled error, not a silently empty database.
 
-## Target VPS and Cloudflare
+## Target host and Cloudflare
 
-- A Linux VM (stable Debian) in an EU provider chosen by the user. Automatic security updates, key-based SSH. Kubernetes and other orchestrators are not part of the first phase.
-- **Cloudflare in front as a proxy**: DDoS, WAF and per-IP rate limiting. The origin must not be directly reachable (otherwise the protection is bypassed). **Cloudflare Tunnel only** (`cloudflared`), preferably as a Compose service: the VM opens outbound connections only, no public port, and the MCP server listens on `127.0.0.1` in plain HTTP. No local reverse proxy (Caddy) and no public 443.
+- A Linux VM (stable Debian) in an EU provider chosen by the user. Automatic security updates, key-based SSH. Kubernetes and other orchestrators are not part of the first phase. The host is not yet provisioned; Objective 2 in `docs/roadmap.md` covers its bootstrap.
+- **Cloudflare in front as a proxy**: DDoS, WAF and per-IP rate limiting. The origin must not be directly reachable (otherwise the protection is bypassed). **Cloudflare Tunnel only** (`cloudflared`): the host opens outbound connections only, no public port, and the MCP server listens on `127.0.0.1` in plain HTTP. No local reverse proxy (Caddy) and no public 443.
   - Note: MCP calls (dynamic JSON-RPC POSTs) need no caching; Cloudflare's value is in DDoS and abuse mitigation.
+- **Debugging phase (no own domain yet):** a temporary Tunnel (`cloudflared tunnel --url http://127.0.0.1:8000`) with the auto-generated `*.trycloudflare.com` URL. Public and unauthenticated: debugging only, closed when not in use, never for third-party traffic. No `cloudflared` Compose service is needed in this phase; it is run ad hoc on the host.
+- **Production phase (own domain):** a named Tunnel, preferably as a Compose service, with a DNS record (`mcp.<domain>`) and per-IP rate limiting on `/mcp` at the edge. This is Objective 3 in the roadmap; do not add it before the debugging deployment works.
 - Separate system users: `offerte-etl` (writes in `/var/lib/offerte`) and `offerte-mcp` (reads the DB). systemd units with hardening: `NoNewPrivileges`, `ProtectSystem=strict`, `ProtectHome`, `PrivateTmp`, minimal `ReadWritePaths`, `MemoryMax`.
 - VPS persistence: prefer explicit host directories (`/var/lib/offerte/db`, `/var/lib/offerte/raw`) over opaque Docker volumes, to simplify backup and restore. In both cases the active DB, `.new`, `.prev` and the lock must stay on the same filesystem.
 - Backup: the DB is rebuildable; save at least the configuration and the active/previous database. Raw files are not kept as a functional requirement.
 - `/healthz` is an HTTP route with no authentication and no application data: it returns 200 only when the DB is readable, otherwise 503; it serves Docker, systemd and future managed providers.
 
-## Local trial with an LLM
+## Local / debugging trial with an LLM
 
-After loading a valid DB, start the service with the local Compose override:
+After loading a valid DB, start the service with the local Compose override (locally, or on the target host for Objective 2):
 
 ```bash
 docker compose -f compose.yml -f deploy/compose.local.yml run --build --rm offerte-etl
@@ -113,7 +117,7 @@ The `compose.local.yml` override bind-mounts `build/`, needs no network download
 
 ## Future Manufact Cloud compatibility
 
-Manufact is not the initial deployment. The repository remains suitable for a future migration because the provider can use the committed `Dockerfile` or the Python runtime and configure the start command, port and per-environment variables. There, too, the service stays public and without application authentication; rate limiting is configured at the provider gateway.
+Manufact is not the initial deployment (Path A is locked; see the roadmap). This section is retained only as a portability note. The repository remains suitable for a future migration because the provider can use the committed `Dockerfile` or the Python runtime and configure the start command, port and per-environment variables. There, too, the service stays public and without application authentication; rate limiting is configured at the provider gateway.
 
 The future configuration must start HTTP, not stdio:
 

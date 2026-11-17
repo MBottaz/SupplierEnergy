@@ -14,8 +14,8 @@ The users are agents, not people: names, descriptions and output formats are des
 
 ## 2. Principles
 
-- **Minimalism**: few dependencies, no heavy frameworks, no service that needs continuous maintenance.
-- **Portability**: Linux (stable Debian as the target), FreeBSD where possible. The first installation is a VM with Docker Compose; the code must not depend on a specific provider.
+- **Minimalism**: few dependencies, no heavy frameworks, no service that needs continuous maintenance. No provider-abstraction layers (Repository/publisher/manifest) are added for portability: on Path A the only boundaries are environment variables, the Docker image and the filesystem layout, and the SQLite file is the migration artifact.
+- **Portability**: Linux (stable Debian as the target), FreeBSD where possible. The first installation is a VM with Docker Compose; the code must not depend on a specific provider. Deployment path (locked): Cloudflare at the edge, Python at the origin — see §11 and `docs/roadmap.md`; Workers/D1/Durable Objects/R2 are not the runtime or database.
 - **Separation of privileges**: ETL (writes the DB) and interfaces (read it) are distinct processes with distinct users.
 - **The DB is rebuildable** from scratch by downloading the sources again. Raw files are operational staging, not a mandatory historical archive; the DB and schema stay portable as SQLite artifacts.
 - **Do not guess**: track codes and calculation formulas come from the official documentation.
@@ -88,6 +88,7 @@ From the file `PO_Parametri_Mercato_Libero_E_20260928.csv` (100 rows):
 - Names follow a pattern: component prefix (`acc`, `arim`, `asos`, `dis`, `iva`, `pcv`…), customer category (`_d`/`_nd`/`_a`, `_dr`/`_dnr`, `_b1`…`_b6`) and type (`_c` energy, `_f` fixed charge, `_p` power).
 - **The units are not in the file**: €/kWh, €/year or €/POD/year, €/kW/year, odd amounts (`acc_a_h_h` = 4820.0, `gamma` = -73.5737) and dimensionless values (`lambda` = 0.1) coexist. The metadata (unit, customer category, BTA) will be derived from the official documentation in phase B, not inferred from the names.
 - All rows are always loaded as-is; metadata arrives in a second pass (phase B), so a change in the naming scheme does not break the load.
+- Parameters v1: the CSV is a mounted snapshot (`docs/PO_Parametri_Mercato_Libero_E_20261014.csv`), updated manually; automatic download is a production task (roadmap Objective 3).
 - The BTA classification (`_b1`…`_b6`) is mapped to customer power/use from the official document; if it cannot be found, ask the user. This mapping is for phase B, not for loading the parameters.
 - Mandatory parameters checked by the ETL (at least `pcv_a`, `pcv_c`, `iva_a`, `iva_c`, `lambda`): if missing, the swap is blocked.
 
@@ -139,6 +140,8 @@ Stack: Python, the official `mcp` SDK (FastMCP) with streamable HTTP transport, 
 The MCP server is intentionally public and implements no authentication, API key, OAuth, session or credential handling. The private mode uses the same process and the same Compose setup but publishes MCP on loopback only.
 
 When the service is public, `cloudflared` creates the only ingress from the VM and Cloudflare applies per-IP rate limiting, plus TLS and network protections. No application-level rate limiter, Redis or local reverse proxy is added. The server stays stateless; it logs no consumption parameters and no data not needed for diagnosis. `/healthz` requires no authentication and returns only DB readiness.
+
+**Path A (locked).** Cloudflare is used only as the public edge (Tunnel, TLS, DDoS/WAF, rate limiting); the ETL, the SQLite file and the Python MCP server all run on the host. Cloudflare Workers (Python or TypeScript), D1, Durable Objects and R2 are not used: Worker CPU/memory/startup limits and the absence of a filesystem/`sqlite3` in that runtime do not fit the ~22 MB XML ETL or the file-based SQLite design, and a Workers/D1/DO database would only be a derived projection of the SQLite artifact. Ingress has two phases (see `docs/deployment.md` and `docs/roadmap.md`): debugging uses a temporary Tunnel with the Cloudflare default `*.trycloudflare.com` URL (no own domain yet, debugging only); production adds an own domain, a named Tunnel and edge rate limiting.
 
 ## 12. Security checklist
 

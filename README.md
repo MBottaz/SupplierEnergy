@@ -101,7 +101,7 @@ The runtime defaults are suitable for the deployment volume:
 | --- | --- | --- |
 | `OFFERTE_DB` | `/var/lib/offerte/db/offerte.db` | active SQLite database (with `.new` and `.prev` beside it) |
 | `OFFERTE_RAW_DIR` | `/var/lib/offerte/raw` | dated raw downloads |
-| `OFFERTE_PARAMETRI` | unset | parameter CSV, until its automatic download is available |
+| `OFFERTE_PARAMETRI` | unset | parameter CSV; v1 mounts the current snapshot and updates it manually (automatic download is a production task) |
 | `OFFERTE_MCP_HOST` | `127.0.0.1` | MCP HTTP bind address (loopback only in this phase) |
 | `OFFERTE_MCP_PORT` | `8000` | MCP HTTP port; takes precedence over `PORT` |
 | `PORT` | unset | fallback port convention for hosted HTTP platforms |
@@ -162,7 +162,7 @@ docker compose -f compose.yml -f deploy/compose.local.yml up --build offerte-mcp
 docker compose -f compose.yml -f deploy/compose.local.yml run --rm offerte-etl
 ```
 
-The image, the Compose service details, the runtime layout, the lock/readiness behaviour and the target deployment are in `docs/deployment.md`.
+The image, the Compose service details, the runtime layout, the lock/readiness behaviour and the target deployment are in `docs/deployment.md`. Deployment follows Path A (Cloudflare at the edge, Python at the origin; see `docs/roadmap.md`): for now there is no own domain, so debugging uses a temporary Cloudflare Tunnel with the default `*.trycloudflare.com` URL and is not for third-party traffic; a named Tunnel on an own domain is the production step.
 
 ## Documentation
 
