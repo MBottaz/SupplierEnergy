@@ -77,6 +77,169 @@ Run the ETL manually:
 docker compose --profile etl run --rm offerte-etl
 ```
 
+## Deploy and shut down (runbook)
+
+Copy-paste commands to bring the MCP service up and down, on a local machine and on the target VPS. The image and the services are the same in both cases; only the database location and the ingress differ. Always verify with `/healthz` (200 only when the database is readable) and `python -m offerte.mcp --verifica` (exit 0 readable, 1 missing, 2 unreadable).
+
+### Local machine
+
+Prerequisites: Docker Engine with the Compose v2 plugin (or Podman with `podman-compose`), `uv` and `just` for the ETL commands, and optionally `cloudflared` for a public trial URL.
+
+Deploy:
+
+```bash
+# 1. database: fixture (smoke test only, it expired) or real data
+just etl-fixture          # tiny checked-in fixture; the default validity filter returns nothing
+just etl-scarica          # download the current XML and load it
+just etl-pun              # optional: monthly PUN
+
+# 2. build the image and start MCP on host loopback with the local override
+docker compose -f compose.yml -f deploy/compose.local.yml up --build -d offerte-mcp
+
+# 3. verify
+curl -fsS http://127.0.0.1:8000/healthz
+docker compose -f compose.yml -f deploy/compose.local.yml ps
+```
+
+The `compose.local.yml` override bind-mounts `build/`, runs as the host UID/GID (set `OFFERTE_LOCAL_UID` and `OFFERTE_LOCAL_GID` if yours differ from `1000`) and adds `:z` to the bind mounts for SELinux hosts. It needs no network downloads. Do not run its `offerte-etl` service after `just etl-scarica`: that service reloads the expired fixture and would replace the real database. Load real data with `just etl-scarica`/`just etl-pun` and start only `offerte-mcp`.
+
+Public trial URL, only if the MCP client runs outside this machine:
+
+```bash
+cloudflared tunnel --url http://127.0.0.1:8000
+# MCP endpoint: https://<temporary-name>.trycloudflare.com/mcp
+```
+
+Shut down:
+
+```bash
+# close the public tunnel, if started
+pkill -f 'cloudflared tunnel'      # or Ctrl-C in its terminal
+# stop and remove the local services (the build/ database is kept)
+docker compose -f compose.yml -f deploy/compose.local.yml down
+# optional: remove the generated database and raw downloads (both ignored by Git)
+rm -f build/offerte.db build/offerte.db.new build/offerte.db.prev
+rm -rf raw/
+```
+
+Podman is a drop-in replacement for the Compose commands, verified on a host without Docker:
+
+```bash
+podman-compose -f compose.yml -f deploy/compose.local.yml up --build -d offerte-mcp
+podman-compose -f compose.yml -f deploy/compose.local.yml down
+```
+
+### VPS / target host
+
+Prerequisites: stable Debian with automatic security updates, key-based SSH, Docker Engine with the Compose v2 plugin, and no public MCP port — the Tunnel is the only ingress.
+
+Host bootstrap and configuration (once):
+
+```bash
+sudo apt update && sudo apt full-upgrade -y
+# install Docker Engine and the Compose plugin from Docker's official repository
+sudo systemctl enable --now docker
+
+# no public MCP port: keep only SSH reachable
+sudo ufw default deny incoming
+sudo ufw allow OpenSSH
+sudo ufw enable
+
+# clone the repository and prepare the configuration
+git clone <repository> offerte && cd offerte
+cp .env.example .env      # port and parameter CSV location; edit if needed
+```
+
+Deploy:
+
+```bash
+# 1. build the single image
+docker compose build
+
+# 2. load a database on the host (downloads the current XML)
+docker compose --profile etl run --rm offerte-etl
+
+# 3. start MCP (publishes the port only on host loopback)
+docker compose up -d offerte-mcp
+
+# 4. verify
+curl -fsS http://127.0.0.1:8000/healthz
+docker compose exec offerte-mcp python -m offerte.mcp --verifica
+```
+
+Expose it in the debugging phase (no own domain): run `cloudflared` ad hoc on the host and configure the MCP client with the returned URL plus `/mcp`:
+
+```bash
+cloudflared tunnel --url http://127.0.0.1:8000
+```
+
+Keep `cloudflared` on the host or give its container the host network: inside a separate container `127.0.0.1` is the container, not the host. The production phase replaces this with a named Tunnel and a `mcp.<domain>` hostname (Objective 3).
+
+Update after a new commit:
+
+```bash
+git pull
+docker compose build
+docker compose up -d offerte-mcp                       # recreate MCP on the new image
+docker compose --profile etl run --rm offerte-etl      # refresh offers/PUN (one-shot, locked)
+```
+
+Shut down, keeping the data:
+
+```bash
+# stop the public tunnel
+sudo systemctl stop cloudflared     # named Tunnel service, once it exists
+pkill -f 'cloudflared tunnel'       # ad-hoc temporary tunnel
+
+# stop MCP
+docker compose stop offerte-mcp     # stop the service, keep the container and the volumes
+docker compose down                 # stop and remove the containers, keep the named volumes
+```
+
+Back up before any destructive step (the named volume holds `offerte.db`, `.new`, `.prev` and the lock):
+
+```bash
+docker run --rm \
+  -v offerte_offerte-db:/db \
+  -v "$PWD:/backup" \
+  alpine tar czf /backup/offerte-db-$(date +%F).tgz -C /db .
+```
+
+Full teardown (destructive; the database is rebuildable but the download and ETL take time):
+
+```bash
+docker compose down
+docker volume rm offerte_offerte-db offerte_offerte-raw
+```
+
+Host-directory persistence (recommended for backup and restore; the design prefers explicit paths over named volumes). Replace the named volumes with bind mounts through an override:
+
+```yaml
+# deploy/compose.vps.yml
+services:
+  offerte-mcp:
+    volumes:
+      - /var/lib/offerte/db:/var/lib/offerte/db:ro
+  offerte-etl:
+    volumes:
+      - /var/lib/offerte/db:/var/lib/offerte/db
+      - /var/lib/offerte/raw:/var/lib/offerte/raw
+```
+
+Compose merges `volumes` by container path, so each entry above replaces the named volume mounted at the same target. Create the directories with the container UID/GID (image defaults: `offerte-etl` 1001, `offerte-mcp` 1002, group `offerte-db` 1000), then confirm the resolved mounts before starting:
+
+```bash
+sudo groupadd -g 1000 offerte-db || true
+sudo useradd -u 1001 -g offerte-db --no-create-home --shell /usr/sbin/nologin offerte-etl || true
+sudo useradd -u 1002 -g offerte-db --no-create-home --shell /usr/sbin/nologin offerte-mcp || true
+sudo install -d -o offerte-etl -g offerte-db -m 0750 /var/lib/offerte/db
+sudo install -d -o offerte-etl -g offerte-db -m 0700 /var/lib/offerte/raw
+docker compose -f compose.yml -f deploy/compose.vps.yml config | grep -A2 volumes
+docker compose -f compose.yml -f deploy/compose.vps.yml up -d offerte-mcp
+```
+
+Keep `offerte.db`, `.new`, `.prev` and `etl.lock` on the same filesystem: never split the database directory across mounts.
+
 ## ETL lock and readiness
 
 Two overlapping ETLs must never read and replace the same database. The lock is an `etl.lock` file in the database directory (exclusive non-blocking `flock`), acquired before reading and before the swap: it lives on the same persistent volume, is shared between containers and is released even on error or termination. If it is already held, the ETL exits with code 3 and a structured `etl_in_corso` error, without touching the database.
@@ -95,17 +258,9 @@ MCP readiness is `python -m offerte.mcp --verifica`: exit 0 if the database is r
 - Backup: the DB is rebuildable; save at least the configuration and the active/previous database. Raw files are not kept as a functional requirement.
 - `/healthz` is an HTTP route with no authentication and no application data: it returns 200 only when the DB is readable, otherwise 503; it serves Docker, systemd and future managed providers.
 
-## Local / debugging trial with an LLM
+## Connect an MCP client (trial)
 
-After loading a valid DB, start the service with the local Compose override (locally, or on the target host for Objective 2):
-
-```bash
-docker compose -f compose.yml -f deploy/compose.local.yml run --build --rm offerte-etl
-docker compose -f compose.yml -f deploy/compose.local.yml up --build -d offerte-mcp
-curl -fsS http://127.0.0.1:8000/healthz
-```
-
-For a remote LLM, use a temporary Tunnel only for the trial:
+Bring the service up and down with the runbook above. The MCP endpoint is `http://127.0.0.1:8000/mcp` on the host, or `https://<hostname>/mcp` through the Tunnel. For a client that does not run on the host, start a temporary Tunnel only for the trial:
 
 ```bash
 cloudflared tunnel --url http://127.0.0.1:8000
@@ -113,7 +268,15 @@ cloudflared tunnel --url http://127.0.0.1:8000
 
 Configure the MCP client with the URL returned by `cloudflared` plus the `/mcp` suffix, for example `https://<temporary-name>.trycloudflare.com/mcp`. Do not publish the MCP port directly on the Internet and do not set the application's non-loopback bind for this trial. The temporary Tunnel is public and unauthenticated: close it at the end of the trial and do not use it for third-party traffic.
 
-The `compose.local.yml` override bind-mounts `build/`, needs no network downloads, runs as the host UID/GID (set `OFFERTE_LOCAL_UID` and `OFFERTE_LOCAL_GID` if yours differ from `1000`) and adds `:z` to the bind mounts for SELinux hosts.
+Streamable HTTP client configuration (the URL carries the `/mcp` suffix):
+
+- **Claude Code:** `claude mcp add --transport http offerte https://<hostname>/mcp`
+- **Cursor** (`~/.cursor/mcp.json`): `{"mcpServers":{"offerte":{"url":"https://<hostname>/mcp"}}}`
+- **VS Code** (`.vscode/mcp.json`): `{"servers":{"offerte":{"type":"http","url":"https://<hostname>/mcp"}}}`
+- **Claude Desktop** (stdio bridge, since it speaks stdio only): `{"mcpServers":{"offerte":{"command":"npx","args":["-y","mcp-remote","https://<hostname>/mcp"]}}}`
+- **MCP Inspector:** `npx @modelcontextprotocol/inspector`
+
+For a client on the same machine, stdio needs no Tunnel and no public URL: `uv run python -m offerte.mcp --db build/offerte.db`.
 
 ## Future Manufact Cloud compatibility
 

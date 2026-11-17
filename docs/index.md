@@ -7,7 +7,7 @@ The root `README.md` is the overview, commands and current state; `AGENTS.md` ho
 - `architecture.md` — stable design: objective, principles, data model, ETL, cost calculation, agent interfaces, security and verification. Align the code to it.
 - `cerca_offerte_contract.md` — contract of the implemented `cerca_offerte` function and MCP tool.
 - `xml_validation.md` — aggregate validation of the real XML loaded by the ETL.
-- `deployment.md` — Docker image, Compose services, runtime layout, lock and readiness, target VPS + Cloudflare, future Manufact compatibility.
+- `deployment.md` — Docker image, Compose services, deploy/shut-down runbook (local machine and VPS), runtime layout, lock and readiness, target VPS + Cloudflare, future Manufact compatibility.
 
 ## Open points and next work
 

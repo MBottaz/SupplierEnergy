@@ -162,7 +162,14 @@ docker compose -f compose.yml -f deploy/compose.local.yml up --build offerte-mcp
 docker compose -f compose.yml -f deploy/compose.local.yml run --rm offerte-etl
 ```
 
-The image, the Compose service details, the runtime layout, the lock/readiness behaviour and the target deployment are in `docs/deployment.md`. Deployment follows Path A (Cloudflare at the edge, Python at the origin; see `docs/roadmap.md`): for now there is no own domain, so debugging uses a temporary Cloudflare Tunnel with the default `*.trycloudflare.com` URL and is not for third-party traffic; a named Tunnel on an own domain is the production step.
+Stop the service, keeping the data volume:
+
+```bash
+docker compose stop offerte-mcp     # stop the service, keep the container and the volumes
+docker compose down                 # stop and remove the containers, keep the named volumes
+```
+
+The full deploy and shut-down runbook for a local machine and for the VPS (build, ETL, verify, Tunnel, update, backup, teardown, host-directory persistence) is in `docs/deployment.md`. The image, the Compose service details, the runtime layout and the lock/readiness behaviour are there too. Deployment follows Path A (Cloudflare at the edge, Python at the origin; see `docs/roadmap.md`): for now there is no own domain, so debugging uses a temporary Cloudflare Tunnel with the default `*.trycloudflare.com` URL and is not for third-party traffic; a named Tunnel on an own domain is the production step.
 
 ## Documentation
 
