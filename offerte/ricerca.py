@@ -21,7 +21,13 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 from offerte.errori import FiltroNonSupportato, InputNonValido
-from offerte.zone import codice_provincia, codice_regione, nome_provincia, nome_regione
+from offerte.zone import (
+    codice_provincia,
+    codice_regione,
+    nome_provincia,
+    nome_regione,
+    regione_di_provincia,
+)
 
 FILTRI_AMMESSI = frozenset(
     {
@@ -69,6 +75,14 @@ _ZONE: tuple[tuple[str, str], ...] = (
     ("comune", "COMUNE"),
 )
 
+#: Percorsi delle zone in `extra_json`, nell'ordine di `_ZONE`.
+_PERCORSI_ZONA_SQL: tuple[str, ...] = tuple(
+    f'$."offerta/ZoneOfferta/{percorso}"' for _, percorso in _ZONE
+)
+
+#: Offerta senza alcuna zona dichiarata: vale su tutto il territorio nazionale.
+_CLAUSOLA_NAZIONALE = "(" + " AND ".join("json_type(o.extra_json, ?) IS NULL" for _ in _ZONE) + ")"
+
 #: Colonne selezionate, nell'ordine in cui vengono lette.
 _SQL_COLONNE = (
     "o.piva, o.cod_offerta, o.nome, o.descrizione, o.tipo_cliente, o.tipo_offerta,"
@@ -98,13 +112,29 @@ def oggi() -> str:
 
 def _codice_comune(valore: str) -> str:
     """Il filtro `comune` è un codice ISTAT a 6 cifre: i nomi non sono tradotti."""
-    if len(valore) == 6 and valore.isdigit():
-        return valore
-    raise InputNonValido(
-        "comune deve essere il codice ISTAT a 6 cifre "
-        "(per esempio 015146 per Milano); la ricerca per nome del comune "
-        "non è supportata"
-    )
+    if len(valore) != 6 or not valore.isdigit():
+        raise InputNonValido(
+            "comune deve essere il codice ISTAT a 6 cifre "
+            "(per esempio 015146 per Milano); la ricerca per nome del comune "
+            "non è supportata"
+        )
+    if regione_di_provincia(valore[:3]) is None:
+        raise InputNonValido(
+            "comune deve essere un codice ISTAT valido: le prime 3 cifre sono la provincia"
+        )
+    return valore
+
+
+def _valida_gerarchia(regione: str | None, provincia: str | None, comune: str | None) -> None:
+    """I filtri geografici indicati insieme devono essere annidati."""
+    if provincia is not None and regione is not None and regione_di_provincia(provincia) != regione:
+        raise InputNonValido("la provincia indicata non appartiene alla regione indicata")
+    if comune is not None:
+        provincia_del_comune = comune[:3]
+        if provincia is not None and provincia_del_comune != provincia:
+            raise InputNonValido("il comune indicato non appartiene alla provincia indicata")
+        if regione is not None and regione_di_provincia(provincia_del_comune) != regione:
+            raise InputNonValido("il comune indicato non appartiene alla regione indicata")
 
 
 def _valida(filtri: Mapping[str, object]) -> _Filtri:
@@ -148,15 +178,20 @@ def _valida(filtri: Mapping[str, object]) -> _Filtri:
     elif not 1 <= limite <= LIMIT_MASSIMO:
         raise InputNonValido(f"limit deve essere un intero fra 1 e {LIMIT_MASSIMO}")
 
-    regione = stringa("regione")
-    provincia = stringa("provincia")
-    comune = stringa("comune")
+    regione_grezza = stringa("regione")
+    provincia_grezza = stringa("provincia")
+    comune_grezzo = stringa("comune")
+
+    regione = codice_regione(regione_grezza) if regione_grezza is not None else None
+    provincia = codice_provincia(provincia_grezza) if provincia_grezza is not None else None
+    comune = _codice_comune(comune_grezzo) if comune_grezzo is not None else None
+    _valida_gerarchia(regione, provincia, comune)
 
     return _Filtri(
         fornitore=stringa("fornitore"),
-        regione=codice_regione(regione) if regione is not None else None,
-        provincia=codice_provincia(provincia) if provincia is not None else None,
-        comune=_codice_comune(comune) if comune is not None else None,
+        regione=regione,
+        provincia=provincia,
+        comune=comune,
         tipo_cliente=opzione("tipo_cliente", OPZIONI_TIPO_CLIENTE, _CODICI_TIPO_CLIENTE),
         tipo_offerta=opzione("tipo_offerta", OPZIONI_TIPO_OFFERTA, _CODICI_TIPO_OFFERTA),
         indicizzata=indicizzata,
@@ -174,6 +209,26 @@ def _casefold(valore: Any) -> Any:
 
 def _sfuggi_like(testo: str) -> str:
     return testo.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
+def _bacini_geografici(filtri: _Filtri) -> tuple[list[str], list[str], list[str]]:
+    """Livelli da corrispondere: il filtro più specifico e i livelli più ampi.
+
+    Una provincia è coperta da un'offerta che la dichiara o che dichiara la sua
+    regione; un comune anche da un'offerta che dichiara la sua provincia.
+    """
+    if filtri.comune is not None:
+        provincia = filtri.comune[:3]
+        regione = regione_di_provincia(provincia)
+        assert regione is not None  # garantito da `_codice_comune`
+        return [regione], [provincia], [filtri.comune]
+    if filtri.provincia is not None:
+        regione = regione_di_provincia(filtri.provincia)
+        assert regione is not None  # garantito da `_valida`
+        return [regione], [filtri.provincia], []
+    if filtri.regione is not None:
+        return [filtri.regione], [], []
+    return [], [], []
 
 
 def _clausole(filtri: _Filtri) -> tuple[list[str], list[object]]:
@@ -201,15 +256,25 @@ def _clausole(filtri: _Filtri) -> tuple[list[str], list[object]]:
         )
         parametri.extend([modello, modello])
 
-    for nome, percorso in _ZONE:
-        valore = getattr(filtri, nome)
-        if valore is None:
-            continue
-        clausole.append(
-            "EXISTS (SELECT 1 FROM json_each(o.extra_json, ?) AS g"
-            " WHERE casefold(g.value) = casefold(?))"
-        )
-        parametri.extend([f'$."offerta/ZoneOfferta/{percorso}"', valore])
+    regioni, province, comuni = _bacini_geografici(filtri)
+    if regioni or province or comuni:
+        sottoclausole = [_CLAUSOLA_NAZIONALE]
+        parametri.extend(_PERCORSI_ZONA_SQL)
+        for percorso, valori in (
+            ("REGIONE", regioni),
+            ("PROVINCIA", province),
+            ("COMUNE", comuni),
+        ):
+            if not valori:
+                continue
+            segnaposti = ", ".join("casefold(?)" for _ in valori)
+            sottoclausole.append(
+                "EXISTS (SELECT 1 FROM json_each(o.extra_json, ?) AS g"
+                f" WHERE casefold(g.value) IN ({segnaposti}))"
+            )
+            parametri.append(f'$."offerta/ZoneOfferta/{percorso}"')
+            parametri.extend(valori)
+        clausole.append("(" + " OR ".join(sottoclausole) + ")")
 
     return clausole, parametri
 
@@ -274,7 +339,9 @@ def _avvertenze(filtri: _Filtri) -> list[str]:
         )
     if any(getattr(filtri, nome) is not None for nome, _ in _ZONE):
         avvertenze.append(
-            "le zone sono quelle dichiarate dall'offerta; le offerte senza zone non corrispondono"
+            "le offerte senza zone dichiarate valgono su tutto il territorio "
+            "nazionale e sono sempre incluse; un filtro più specifico include "
+            "anche le offerte dichiarate a livello più ampio"
         )
     if filtri.testo is not None:
         avvertenze.append("la ricerca testuale copre solo nome e descrizione dell'offerta")

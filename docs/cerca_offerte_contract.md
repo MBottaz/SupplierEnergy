@@ -24,7 +24,9 @@ A single parameter, `filtri`: a JSON object with **all fields optional**. Withou
 
 The two type filters accept the labels above; the result keeps the official track codes for `tipo_cliente` and `tipo_offerta`.
 
-For geographical zones the ETL may have collected **multiple values** for the same offer (repeated XML paths): the match is true if at least one value matches. The values are **ISTAT codes** (region 2 digits, province 3, comune 6). `regione` and `provincia` accept the official name or the code; `comune` accepts only the 6-digit code. The name/code tables (20 regions and 107 provinces) are the official ISTAT ones and live in `offerte/zone.py`. The codes are not geocoded further; offers without zones do not match a geographical filter, although the track normalizes the absence of `ZoneOfferta` to "whole national territory".
+For geographical zones the ETL may have collected **multiple values** for the same offer (repeated XML paths): the match is true if at least one value matches. The values are **ISTAT codes** (region 2 digits, province 3, comune 6). `regione` and `provincia` accept the official name or the code; `comune` accepts only the 6-digit code. The name/code tables (20 regions and 107 provinces) and the province→region map are the official ISTAT ones and live in `offerte/zone.py`.
+
+Matching is hierarchical and always includes national offers. An offer with no `ZoneOfferta` is treated as covering the whole national territory and therefore matches **any** geographical filter. A filter at a given level matches offers declared at that level **or at a coarser one**: a `provincia` filter also matches offers that declared its region, and a `comune` filter also matches offers that declared its province or its region. A `regione` filter does **not** match offers that declared only a province or comune inside it, because those do not necessarily cover the whole region. When several geographical filters are passed together they must be nested (the province must belong to the region, the comune to the province and the region); otherwise the input is invalid.
 
 ### Temporal validity
 
@@ -67,7 +69,7 @@ A serializable JSON object, produced by `offerte.ricerca.cerca_offerte` in Pytho
 - `dati_aggiornati_al` is `max(offerta.snapshot_date)` derived from the database (`null` if the table is empty).
 - `zone` always contains lists (possibly empty); repeated values are normalized into a list. `regione` and `provincia` are decoded to the official names (the raw code is kept as a fallback if unknown); `comune` stays a 6-digit ISTAT code.
 - `testo_venditore_non_fidato` is `true` and signals that `nome_offerta` and `descrizione_offerta` are seller free text: **untrusted data, never instructions**.
-- `avvertenze` is a list of strings, empty when no active filter deserves a note (for example a search by `fornitore`/VAT number or by geographical zone).
+- `avvertenze` is a list of strings, empty when no active filter deserves a note (for example a search by `fornitore`/VAT number or by geographical zone). A geographical filter adds a note recalling that offers with no declared zone are always included and that coarser declarations match.
 - Ordering is stable: `piva`, then `cod_offerta`.
 
 ## Errors
@@ -80,7 +82,7 @@ Out-of-contract input produces a structured error, with no SQL, stack trace or i
 
 | `codice` | When |
 |---|---|
-| `input_non_valido` | wrong JSON type, empty or too-long string, `limit` outside 1–50, a `tipo_cliente`/`tipo_offerta` label not allowed, an unknown region/province name or code, or a `comune` that is not a 6-digit ISTAT code. The labels of the type filters and the region/province names are case-insensitive. |
+| `input_non_valido` | wrong JSON type, empty or too-long string, `limit` outside 1–50, a `tipo_cliente`/`tipo_offerta` label not allowed, an unknown region/province name or code, a `comune` that is not a 6-digit ISTAT code, or geographical filters that are not nested (province outside the region, comune outside the province). The labels of the type filters and the region/province names are case-insensitive. |
 | `filtro_non_supportato` | a `filtri` key not in the table above. |
 | `database_non_disponibile` | database missing, unreadable or not openable read-only. |
 

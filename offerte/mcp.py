@@ -53,13 +53,16 @@ Tutti i filtri sono opzionali e vanno passati dentro `filtri`:
 
 - `fornitore`: P.IVA esatta del venditore. Il nome commerciale NON è nel modello
   dati: cercare per nome non produce risultati.
-- `regione`, `provincia`: senza distinzione fra maiuscole e minuscole, con le
-  zone dichiarate dall'offerta. Si passa il nome ufficiale oppure il codice
-  ISTAT (2 cifre la regione, 3 la provincia). Regioni: {_ELENCO_REGIONI}.
+- `regione`, `provincia`: senza distinzione fra maiuscole e minuscole. Si passa
+  il nome ufficiale oppure il codice ISTAT (2 cifre la regione, 3 la provincia),
+  riferito alle zone dichiarate dall'offerta. Regioni: {_ELENCO_REGIONI}.
   Province: {_ELENCO_PROVINCE}.
 - `comune`: solo il codice ISTAT a 6 cifre (per esempio `015146` per Milano); il
-  nome del comune non è supportato. Le offerte senza zone dichiarate non
-  corrispondono a un filtro geografico.
+  nome del comune non è supportato.
+- Zone: sono sempre incluse le offerte senza zone dichiarate, perché valgono su
+  tutto il territorio nazionale. Un filtro più specifico include anche le
+  offerte dichiarate a un livello più ampio: la provincia include la sua
+  regione, il comune la sua provincia e la sua regione.
 - `tipo_cliente`: una delle etichette `domestico`, `altri usi`, `condominio
   uso domestico (gas)`.
 - `tipo_offerta`: una delle etichette `fisso`, `variabile`, `flat`, `mista`.

@@ -122,39 +122,82 @@ def test_filtro_fornitore(db: Path) -> None:
 
 
 def test_filtro_regione_case_insensitive(db: Path) -> None:
-    assert _identificativi(_cerca(db, regione="lombardia")) == [
+    assert _identificativi(_cerca(db, fornitore="11111111111", regione="lombardia")) == [
         ("11111111111", "A1"),
         ("11111111111", "A2"),
     ]
-    assert _identificativi(_cerca(db, regione="LAZIO")) == [("22222222222", "B2")]
+    assert _identificativi(_cerca(db, fornitore="22222222222", regione="LAZIO")) == [
+        ("22222222222", "B2")
+    ]
 
 
-def test_filtro_provincia_e_comune(db: Path) -> None:
-    assert _identificativi(_cerca(db, provincia="TORINO")) == [("11111111111", "A2")]
-    assert _identificativi(_cerca(db, comune="015146")) == [
+def test_regione_non_corrisponde_alle_province_dentro_di_essa(db: Path) -> None:
+    # C1 dichiara solo la provincia di Forlì-Cesena: non copre tutta l'Emilia-Romagna
+    assert _identificativi(_cerca(db, fornitore="33333333333", regione="Emilia-Romagna")) == []
+
+
+def test_provincia_include_la_sua_regione(db: Path) -> None:
+    # B2 dichiara la regione Lazio: copre la provincia di Roma
+    assert _identificativi(_cerca(db, fornitore="22222222222", provincia="Roma")) == [
+        ("22222222222", "B2")
+    ]
+    assert _identificativi(_cerca(db, fornitore="11111111111", provincia="Milano")) == [
         ("11111111111", "A1"),
         ("11111111111", "A2"),
     ]
-    assert _identificativi(_cerca(db, provincia="Roma")) == []
+    assert _identificativi(_cerca(db, fornitore="11111111111", provincia="Torino")) == [
+        ("11111111111", "A2")
+    ]
+
+
+def test_comune_include_provincia_e_regione(db: Path) -> None:
+    assert _identificativi(_cerca(db, fornitore="11111111111", comune="015146")) == [
+        ("11111111111", "A1"),
+        ("11111111111", "A2"),
+    ]
+    # B2 dichiara solo la regione Lazio: copre il comune di Roma
+    assert _identificativi(_cerca(db, fornitore="22222222222", comune="058091")) == [
+        ("22222222222", "B2")
+    ]
+
+
+def test_offerte_senza_zone_sempre_incluse(db: Path) -> None:
+    nazionali = {("99999999999", f"E{numero:02d}") for numero in range(1, 26)}
+    risultato = _cerca(db, provincia="Milano", limit=50)
+    identificativi = set(_identificativi(risultato))
+    assert nazionali.issubset(identificativi)
+    assert {("11111111111", "A1"), ("11111111111", "A2")}.issubset(identificativi)
+    assert ("22222222222", "B2") not in identificativi  # Lazio
 
 
 def test_filtro_regione_con_codice(db: Path) -> None:
-    assert _identificativi(_cerca(db, regione="03")) == [
+    assert _identificativi(_cerca(db, fornitore="11111111111", regione="03")) == [
         ("11111111111", "A1"),
         ("11111111111", "A2"),
     ]
-    assert _identificativi(_cerca(db, regione="1")) == [("11111111111", "A2")]
+    assert _identificativi(_cerca(db, fornitore="11111111111", regione="1")) == [
+        ("11111111111", "A2")
+    ]
 
 
 def test_geografia_ripetuta_in_lista(db: Path) -> None:
-    risultato = _cerca(db, regione="Piemonte")
+    risultato = _cerca(db, fornitore="11111111111", regione="Piemonte")
     assert _identificativi(risultato) == [("11111111111", "A2")]
     assert risultato["risultati"][0]["zone"]["regione"] == ["Lombardia", "Piemonte"]
 
 
 def test_filtro_provincia_con_accento(db: Path) -> None:
     for valore in ("forlì-cesena", "Forlì-Cesena", "FORLI-CESENA"):
-        assert _identificativi(_cerca(db, provincia=valore)) == [("33333333333", "C1")]
+        assert _identificativi(_cerca(db, fornitore="33333333333", provincia=valore)) == [
+            ("33333333333", "C1")
+        ]
+
+
+def test_gerarchia_geografica_incoerente(db: Path) -> None:
+    with pytest.raises(InputNonValido):
+        _cerca(db, regione="Lazio", provincia="Milano")
+    with pytest.raises(InputNonValido):
+        _cerca(db, provincia="Milano", comune="058091")
 
 
 def test_filtro_tipo_cliente_con_etichetta(db: Path) -> None:
@@ -249,6 +292,9 @@ def test_validita_temporale(db: Path) -> None:
         {"comune": "Milano"},
         {"comune": "12345"},
         {"comune": "0151460"},
+        {"comune": "999999"},
+        {"regione": "Lazio", "provincia": "Milano"},
+        {"provincia": "Milano", "comune": "058091"},
         {"fornitore": ""},
         {"indicizzata": "true"},
         {"indicizzata": 1},

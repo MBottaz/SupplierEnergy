@@ -11,6 +11,7 @@ import pytest
 from offerte.errori import InputNonValido
 from offerte.zone import (
     PROVINCE,
+    REGIONE_DI_PROVINCIA,
     REGIONI,
     codice_provincia,
     codice_regione,
@@ -18,6 +19,7 @@ from offerte.zone import (
     elenco_regioni,
     nome_provincia,
     nome_regione,
+    regione_di_provincia,
 )
 
 
@@ -84,6 +86,14 @@ def test_nomi_inversi() -> None:
     assert nome_provincia("015") == "Milano"
     assert nome_regione("99") is None
     assert nome_provincia("999") is None
+
+
+def test_regione_di_provincia() -> None:
+    assert regione_di_provincia("015") == "03"
+    assert regione_di_provincia("058") == "12"
+    assert regione_di_provincia("999") is None
+    assert set(REGIONE_DI_PROVINCIA) == set(PROVINCE)
+    assert set(REGIONE_DI_PROVINCIA.values()) <= set(REGIONI)
 
 
 def test_elenchi() -> None:
