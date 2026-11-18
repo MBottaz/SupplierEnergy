@@ -31,7 +31,7 @@ def db(tmp_path: Path) -> Path:
                 "A1",
                 nome="Luce Casa",
                 descrizione="Offerta per la casa",
-                zone={"REGIONE": "Lombardia", "PROVINCIA": "Milano"},
+                zone={"REGIONE": "03", "PROVINCIA": "015"},
             ),
             offerta(
                 "22222222222",

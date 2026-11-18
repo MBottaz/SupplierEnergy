@@ -31,6 +31,12 @@ from offerte.db import apri_db
 from offerte.errori import DatabaseNonDisponibile, ErroreOfferte
 from offerte.ricerca import OPZIONI_TIPO_CLIENTE, OPZIONI_TIPO_OFFERTA
 from offerte.ricerca import cerca_offerte as esegui_ricerca
+from offerte.zone import elenco_province, elenco_regioni
+
+#: Elenchi ufficiali usati nella descrizione: generati da `offerte.zone` per
+#: restare allineati alle tabelle ISTAT.
+_ELENCO_REGIONI = elenco_regioni()
+_ELENCO_PROVINCE = elenco_province()
 
 #: Host ammessi per il trasporto HTTP: solo loopback. `0.0.0.0`, `::` e
 #: qualunque interfaccia pubblica sono rifiutati prima di aprire la porta.
@@ -39,7 +45,7 @@ HOST_AMMESSI = frozenset({"127.0.0.1", "::1", "localhost"})
 #: Descrizione del tool: è il contratto che un agente legge da `tools/list`.
 #: Deve bastare da sola (filtri, enum, limiti, semantica delle zone, limiti del
 #: modello). Il contratto esteso è in `docs/cerca_offerte_contract.md`.
-DESCRIZIONE_TOOL = """\
+DESCRIZIONE_TOOL = f"""\
 Cerca le offerte di energia elettrica del mercato libero nel database locale
 (aperto in sola lettura). Non calcola costi e non modifica i dati.
 
@@ -47,9 +53,13 @@ Tutti i filtri sono opzionali e vanno passati dentro `filtri`:
 
 - `fornitore`: P.IVA esatta del venditore. Il nome commerciale NON è nel modello
   dati: cercare per nome non produce risultati.
-- `regione`, `provincia`, `comune`: corrispondenza esatta, senza distinzione fra
-  maiuscole e minuscole, con le zone dichiarate dall'offerta. Le offerte senza
-  zone non corrispondono.
+- `regione`, `provincia`: senza distinzione fra maiuscole e minuscole, con le
+  zone dichiarate dall'offerta. Si passa il nome ufficiale oppure il codice
+  ISTAT (2 cifre la regione, 3 la provincia). Regioni: {_ELENCO_REGIONI}.
+  Province: {_ELENCO_PROVINCE}.
+- `comune`: solo il codice ISTAT a 6 cifre (per esempio `015146` per Milano); il
+  nome del comune non è supportato. Le offerte senza zone dichiarate non
+  corrispondono a un filtro geografico.
 - `tipo_cliente`: una delle etichette `domestico`, `altri usi`, `condominio
   uso domestico (gas)`.
 - `tipo_offerta`: una delle etichette `fisso`, `variabile`, `flat`, `mista`.
@@ -78,11 +88,18 @@ class Filtri(BaseModel):
     model_config = ConfigDict(extra="allow")
 
     fornitore: Annotated[Any, Field(description="P.IVA esatta del venditore (stringa).")] = None
-    regione: Annotated[Any, Field(description="Regione dichiarata dall'offerta (stringa).")] = None
-    provincia: Annotated[Any, Field(description="Provincia dichiarata dall'offerta (stringa).")] = (
-        None
-    )
-    comune: Annotated[Any, Field(description="Comune dichiarato dall'offerta (stringa).")] = None
+    regione: Annotated[
+        Any,
+        Field(description="Regione: nome ufficiale (es. Lombardia) o codice ISTAT a 2 cifre."),
+    ] = None
+    provincia: Annotated[
+        Any,
+        Field(description="Provincia: nome ufficiale (es. Milano) o codice ISTAT a 3 cifre."),
+    ] = None
+    comune: Annotated[
+        Any,
+        Field(description="Comune: codice ISTAT a 6 cifre (es. 015146), non il nome."),
+    ] = None
     tipo_cliente: Annotated[
         Any,
         Field(

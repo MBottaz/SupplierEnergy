@@ -34,7 +34,7 @@ def db(tmp_path: Path) -> Path:
             tipo_offerta="02",
             idx_prezzo_energia="PUN_MENSILE",
             data_fine=FUTURO,
-            zone={"REGIONE": "Lombardia", "PROVINCIA": "Milano", "COMUNE": "Milano"},
+            zone={"REGIONE": "03", "PROVINCIA": "015", "COMUNE": "015146"},
         ),
         offerta(
             "11111111111",
@@ -46,9 +46,9 @@ def db(tmp_path: Path) -> Path:
             idx_prezzo_energia=None,
             data_fine=FUTURO,
             zone={
-                "REGIONE": ["Lombardia", "Piemonte"],
-                "PROVINCIA": ["Milano", "Torino"],
-                "COMUNE": ["Milano", "Torino"],
+                "REGIONE": ["03", "01"],
+                "PROVINCIA": ["015", "001"],
+                "COMUNE": ["015146", "001272"],
             },
         ),
         offerta(
@@ -69,7 +69,7 @@ def db(tmp_path: Path) -> Path:
             tipo_offerta="04",
             idx_prezzo_energia=None,
             data_fine=None,
-            zone={"REGIONE": "Lazio", "COMUNE": ["Roma"]},
+            zone={"REGIONE": "12", "COMUNE": ["058091"]},
         ),
         offerta(
             "33333333333",
@@ -80,7 +80,7 @@ def db(tmp_path: Path) -> Path:
             tipo_offerta="01",
             idx_prezzo_energia=None,
             data_fine=FUTURO,
-            zone={"REGIONE": "Forlì"},
+            zone={"PROVINCIA": "040"},
         ),
     ]
     righe.extend(
@@ -131,8 +131,19 @@ def test_filtro_regione_case_insensitive(db: Path) -> None:
 
 def test_filtro_provincia_e_comune(db: Path) -> None:
     assert _identificativi(_cerca(db, provincia="TORINO")) == [("11111111111", "A2")]
-    assert _identificativi(_cerca(db, comune="roma")) == [("22222222222", "B2")]
-    assert _identificativi(_cerca(db, provincia="Piemonte")) == []
+    assert _identificativi(_cerca(db, comune="015146")) == [
+        ("11111111111", "A1"),
+        ("11111111111", "A2"),
+    ]
+    assert _identificativi(_cerca(db, provincia="Roma")) == []
+
+
+def test_filtro_regione_con_codice(db: Path) -> None:
+    assert _identificativi(_cerca(db, regione="03")) == [
+        ("11111111111", "A1"),
+        ("11111111111", "A2"),
+    ]
+    assert _identificativi(_cerca(db, regione="1")) == [("11111111111", "A2")]
 
 
 def test_geografia_ripetuta_in_lista(db: Path) -> None:
@@ -141,9 +152,9 @@ def test_geografia_ripetuta_in_lista(db: Path) -> None:
     assert risultato["risultati"][0]["zone"]["regione"] == ["Lombardia", "Piemonte"]
 
 
-def test_filtro_regione_con_accento(db: Path) -> None:
-    assert _identificativi(_cerca(db, regione="FORLÌ")) == [("33333333333", "C1")]
-    assert _identificativi(_cerca(db, regione="forlì")) == [("33333333333", "C1")]
+def test_filtro_provincia_con_accento(db: Path) -> None:
+    for valore in ("forlì-cesena", "Forlì-Cesena", "FORLI-CESENA"):
+        assert _identificativi(_cerca(db, provincia=valore)) == [("33333333333", "C1")]
 
 
 def test_filtro_tipo_cliente_con_etichetta(db: Path) -> None:
@@ -232,6 +243,12 @@ def test_validita_temporale(db: Path) -> None:
         {"regione": "  "},
         {"regione": 5},
         {"regione": ["Lombardia"]},
+        {"regione": "Lombardiaa"},
+        {"provincia": "Piemonte"},
+        {"provincia": "Milanoo"},
+        {"comune": "Milano"},
+        {"comune": "12345"},
+        {"comune": "0151460"},
         {"fornitore": ""},
         {"indicizzata": "true"},
         {"indicizzata": 1},
@@ -243,6 +260,12 @@ def test_input_non_valido(db: Path, filtri: dict[str, object]) -> None:
         cerca_offerte(conn, filtri)
     assert errore.value.come_dizionario()["codice"] == "input_non_valido"
     assert errore.value.messaggio
+
+
+def test_comune_richiede_codice(db: Path) -> None:
+    with pytest.raises(InputNonValido) as errore, apri_db(db) as conn:
+        cerca_offerte(conn, {"comune": "Milano"})
+    assert "codice ISTAT a 6 cifre" in errore.value.messaggio
 
 
 def test_filtro_non_supportato(db: Path) -> None:

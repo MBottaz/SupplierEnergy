@@ -21,6 +21,7 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 from offerte.errori import FiltroNonSupportato, InputNonValido
+from offerte.zone import codice_provincia, codice_regione, nome_provincia, nome_regione
 
 FILTRI_AMMESSI = frozenset(
     {
@@ -95,6 +96,17 @@ def oggi() -> str:
     return datetime.now(_FUSO).date().isoformat()
 
 
+def _codice_comune(valore: str) -> str:
+    """Il filtro `comune` è un codice ISTAT a 6 cifre: i nomi non sono tradotti."""
+    if len(valore) == 6 and valore.isdigit():
+        return valore
+    raise InputNonValido(
+        "comune deve essere il codice ISTAT a 6 cifre "
+        "(per esempio 015146 per Milano); la ricerca per nome del comune "
+        "non è supportata"
+    )
+
+
 def _valida(filtri: Mapping[str, object]) -> _Filtri:
     ignote = sorted(set(filtri) - FILTRI_AMMESSI)
     if ignote:
@@ -136,11 +148,15 @@ def _valida(filtri: Mapping[str, object]) -> _Filtri:
     elif not 1 <= limite <= LIMIT_MASSIMO:
         raise InputNonValido(f"limit deve essere un intero fra 1 e {LIMIT_MASSIMO}")
 
+    regione = stringa("regione")
+    provincia = stringa("provincia")
+    comune = stringa("comune")
+
     return _Filtri(
         fornitore=stringa("fornitore"),
-        regione=stringa("regione"),
-        provincia=stringa("provincia"),
-        comune=stringa("comune"),
+        regione=codice_regione(regione) if regione is not None else None,
+        provincia=codice_provincia(provincia) if provincia is not None else None,
+        comune=_codice_comune(comune) if comune is not None else None,
         tipo_cliente=opzione("tipo_cliente", OPZIONI_TIPO_CLIENTE, _CODICI_TIPO_CLIENTE),
         tipo_offerta=opzione("tipo_offerta", OPZIONI_TIPO_OFFERTA, _CODICI_TIPO_OFFERTA),
         indicizzata=indicizzata,
@@ -217,6 +233,22 @@ def _valori_zona(extra: Mapping[str, Any], percorso: str) -> list[str]:
     return []
 
 
+def _decodifica(valori: list[str], nome_ufficiale: Any) -> list[str]:
+    """Codice ISTAT -> denominazione ufficiale, con il codice grezzo di ripiego."""
+    return [nome_ufficiale(valore) or valore for valore in valori]
+
+
+def _zone_risultato(extra: Mapping[str, Any]) -> dict[str, list[str]]:
+    """Zone decodificate: regioni e province per nome, comuni come codici."""
+    return {
+        "regione": _decodifica(_valori_zona(extra, "offerta/ZoneOfferta/REGIONE"), nome_regione),
+        "provincia": _decodifica(
+            _valori_zona(extra, "offerta/ZoneOfferta/PROVINCIA"), nome_provincia
+        ),
+        "comune": _valori_zona(extra, "offerta/ZoneOfferta/COMUNE"),
+    }
+
+
 def _riga_a_risultato(riga: sqlite3.Row) -> dict[str, Any]:
     extra = _carica_extra(riga["extra_json"])
     return {
@@ -230,9 +262,7 @@ def _riga_a_risultato(riga: sqlite3.Row) -> dict[str, Any]:
         "indicizzata": riga["idx_prezzo_energia"] is not None,
         "data_inizio": riga["data_inizio"],
         "data_fine": riga["data_fine"],
-        "zone": {
-            nome: _valori_zona(extra, f"offerta/ZoneOfferta/{percorso}") for nome, percorso in _ZONE
-        },
+        "zone": _zone_risultato(extra),
     }
 
 

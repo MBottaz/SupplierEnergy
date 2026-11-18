@@ -63,6 +63,10 @@ All encoded fields use the track codes, except one case (§11).
 
 `durata`: 12 months for 1,759 offers, `-1` (indefinite) 1,066, then 24/36/60/72/…; `garanzie` is free text (often "NO").
 
+### Geographic zones (`ZoneOfferta`)
+
+`REGIONE`/`PROVINCIA`/`COMUNE` are **ISTAT codes** (the track calls them "Elenco Codici Istat"): 2, 3 and 6 digits, with significant leading zeros. 322 offers carry a `ZoneOfferta` block; the others carry none (the track reads the absence as "whole national territory"). Distinct codes in the file: 20 regions, 66 provinces, 1,722 comuni. The read side decodes regions and provinces to the official names (`offerte/zone.py`, official ISTAT tables); comuni stay 6-digit codes.
+
 ## 5. Repeated elements
 
 Within the same offer, and therefore stored as a list in `extra_json` while the column holds the first value:

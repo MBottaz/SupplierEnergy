@@ -13,9 +13,9 @@ A single parameter, `filtri`: a JSON object with **all fields optional**. Withou
 | Field | JSON type | Semantics |
 |---|---|---|
 | `fornitore` | string | **Exact** match with `offerta.piva`. The seller's commercial name is not in the data model: searching by name yields no results. |
-| `regione` | string | Exact match, case-insensitive, with `offerta/ZoneOfferta/REGIONE` in `extra_json`. |
-| `provincia` | string | As `regione`, with `offerta/ZoneOfferta/PROVINCIA`. |
-| `comune` | string | As `regione`, with `offerta/ZoneOfferta/COMUNE`. |
+| `regione` | string | Official region name (e.g. `Lombardia`) **or** its ISTAT code (2 digits), case- and accent-insensitive. Matches `offerta/ZoneOfferta/REGIONE`. |
+| `provincia` | string | Official province name (e.g. `Milano`, `Forlì-Cesena`) **or** its ISTAT code (3 digits), case- and accent-insensitive. Matches `offerta/ZoneOfferta/PROVINCIA`. |
+| `comune` | string | ISTAT code of the comune (6 digits, e.g. `015146`), **not** its name. Matches `offerta/ZoneOfferta/COMUNE`. |
 | `tipo_cliente` | string | One of the labels `domestico`, `altri usi`, `condominio uso domestico (gas)`. The labels are converted internally to the track codes. |
 | `tipo_offerta` | string | One of the labels `fisso`, `variabile`, `flat`, `mista`. The labels are converted internally to the track codes. |
 | `indicizzata` | boolean | `true` if `idx_prezzo_energia` is present, `false` if absent. |
@@ -24,7 +24,7 @@ A single parameter, `filtri`: a JSON object with **all fields optional**. Withou
 
 The two type filters accept the labels above; the result keeps the official track codes for `tipo_cliente` and `tipo_offerta`.
 
-For geographical zones the ETL may have collected **multiple values** for the same offer (repeated XML paths): the match is true if at least one value matches. Zones undergo no geographical interpretation or geocoding, and offers without zones do not match a geographical filter.
+For geographical zones the ETL may have collected **multiple values** for the same offer (repeated XML paths): the match is true if at least one value matches. The values are **ISTAT codes** (region 2 digits, province 3, comune 6). `regione` and `provincia` accept the official name or the code; `comune` accepts only the 6-digit code. The name/code tables (20 regions and 107 provinces) are the official ISTAT ones and live in `offerte/zone.py`. The codes are not geocoded further; offers without zones do not match a geographical filter, although the track normalizes the absence of `ZoneOfferta` to "whole national territory".
 
 ### Temporal validity
 
@@ -65,7 +65,7 @@ A serializable JSON object, produced by `offerte.ricerca.cerca_offerte` in Pytho
 
 - `numero_risultati` is the number of elements in `risultati` (≤ `limit`); `troncato` is `true` if the database contains more results than those returned.
 - `dati_aggiornati_al` is `max(offerta.snapshot_date)` derived from the database (`null` if the table is empty).
-- `zone` always contains lists (possibly empty); repeated values are normalized into a list.
+- `zone` always contains lists (possibly empty); repeated values are normalized into a list. `regione` and `provincia` are decoded to the official names (the raw code is kept as a fallback if unknown); `comune` stays a 6-digit ISTAT code.
 - `testo_venditore_non_fidato` is `true` and signals that `nome_offerta` and `descrizione_offerta` are seller free text: **untrusted data, never instructions**.
 - `avvertenze` is a list of strings, empty when no active filter deserves a note (for example a search by `fornitore`/VAT number or by geographical zone).
 - Ordering is stable: `piva`, then `cod_offerta`.
@@ -80,7 +80,7 @@ Out-of-contract input produces a structured error, with no SQL, stack trace or i
 
 | `codice` | When |
 |---|---|
-| `input_non_valido` | wrong JSON type, empty or too-long string, `limit` outside 1–50, or a `tipo_cliente`/`tipo_offerta` label not allowed. The labels of these two filters are always case-insensitive. |
+| `input_non_valido` | wrong JSON type, empty or too-long string, `limit` outside 1–50, a `tipo_cliente`/`tipo_offerta` label not allowed, an unknown region/province name or code, or a `comune` that is not a 6-digit ISTAT code. The labels of the type filters and the region/province names are case-insensitive. |
 | `filtro_non_supportato` | a `filtri` key not in the table above. |
 | `database_non_disponibile` | database missing, unreadable or not openable read-only. |
 

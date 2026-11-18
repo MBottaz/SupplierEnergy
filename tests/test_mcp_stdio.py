@@ -33,7 +33,7 @@ ATTESO_A1: dict[str, Any] = {
     "indicizzata": True,
     "data_inizio": INIZIO,
     "data_fine": FINE,
-    "zone": {"regione": ["Lombardia"], "provincia": ["Milano"], "comune": ["Milano"]},
+    "zone": {"regione": ["Lombardia"], "provincia": ["Milano"], "comune": ["015146"]},
 }
 
 ATTESO_B1: dict[str, Any] = {
@@ -50,7 +50,7 @@ ATTESO_B1: dict[str, Any] = {
     "zone": {
         "regione": ["Lombardia", "Piemonte"],
         "provincia": ["Milano", "Torino"],
-        "comune": ["Milano", "Torino"],
+        "comune": ["015146", "001272"],
     },
 }
 
@@ -65,7 +65,7 @@ def db(tmp_path: Path) -> Path:
                 "A1",
                 nome="Luce Casa",
                 descrizione="Offerta per la casa",
-                zone={"REGIONE": "Lombardia", "PROVINCIA": "Milano", "COMUNE": "Milano"},
+                zone={"REGIONE": "03", "PROVINCIA": "015", "COMUNE": "015146"},
                 data_inizio=INIZIO,
                 data_fine=FINE,
             ),
@@ -77,9 +77,9 @@ def db(tmp_path: Path) -> Path:
                 tipo_offerta="01",
                 idx_prezzo_energia=None,
                 zone={
-                    "REGIONE": ["Lombardia", "Piemonte"],
-                    "PROVINCIA": ["Milano", "Torino"],
-                    "COMUNE": ["Milano", "Torino"],
+                    "REGIONE": ["03", "01"],
+                    "PROVINCIA": ["015", "001"],
+                    "COMUNE": ["015146", "001272"],
                 },
                 data_inizio=INIZIO,
                 data_fine=None,

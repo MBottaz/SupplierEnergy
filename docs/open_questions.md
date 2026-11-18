@@ -19,6 +19,8 @@ Doubts about codes, formulas, sources and terms of use. Work continues on everyt
 
 ## Resolved
 
+- **Geographic zone codes**: `ZoneOfferta/REGIONE`, `PROVINCIA`, `COMUNE` are ISTAT codes (the track calls them "Elenco Codici Istat": region 2 digits, province 3, comune 6). `cerca_offerte` accepts the official region/province name or the code for `regione`/`provincia` and keeps `comune` a 6-digit code; the tables come from the ISTAT "Elenco dei comuni italiani" (source and URL in `offerte/zone.py`). The track reads the absence of `ZoneOfferta` as "whole national territory", but the tool still treats it as "does not match", as documented in the contract.
+
 - **Track decodings**: from the official document "Funzionamento e Specifiche del Processo di Trasmissione Offerte Mercato Retail" v5.0 (Acquirente Unico, 15/12/2025), section "7 Formato e tracciato delle Offerte". 82 entries loaded into `codifica` from `etl/codifiche.py` (source and URL in the module). It includes the frequency in the description of `IDX_PREZZO_ENERGIA`, because the same index has different codes for quarterly/bi-monthly/monthly.
 - **Date format** `gg/mm/aaaa_hh:mm:ss`: normalized to ISO 8601 with the `Europe/Rome` time zone (track, section `ValiditaOfferta`).
 - **`DURATA = -1`**: from the track it means indefinite duration; stored as a string, with no interpretation.

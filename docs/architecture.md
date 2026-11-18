@@ -125,7 +125,7 @@ A single library and a thin MCP server, which is the only point of contact betwe
 MCP functions (stable names, read-only annotation):
 
 - `confronta_offerte(tipo_cliente, consumo_annuo_kwh, ripartizione_fasce?, potenza_kw?, tipo_prezzo?, pun_scenario_eur_mwh?, cod_offerte?, n=10)` → ranking with `costo_annuo_eur`, `dettaglio_componenti`, `ipotesi`, `non_calcolabili`, `dati_aggiornati_al`, `avvertenze`
-- `cerca_offerte(venditore?, tipo_cliente?, tipo_prezzo?, indicizzata?, testo?, limit=20)`
+- `cerca_offerte(fornitore?, regione?, provincia?, comune?, tipo_cliente?, tipo_offerta?, indicizzata?, testo?, limit=20)`
 - `dettaglio_offerta(piva, cod_offerta)`
 - `pun(da, a, aggregazione=mensile)` (the daily PUN is out of scope for now)
 - `decodifica(dominio, codice?)`
